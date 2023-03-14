@@ -35,7 +35,7 @@ static int NewEventFd() {
 #if defined(__APPLE__)
   event_fd = kqueue();
 #elif defined(__linux__)
-  event_fd = eventfd(0, 0);
+  event_fd = eventfd(0, EFD_NONBLOCK);
 #else
 #error "Unknown operating system"
 #endif

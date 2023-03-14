@@ -8,9 +8,11 @@
 #include <stdio.h>
 #include "coroutine.h"
 
+#if defined(__APPLE__)
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
+#endif
 
 #include <unistd.h>
 
@@ -40,6 +42,8 @@ static void NewTimer(int fd, int millis) {
 }
 
 static void ClearTimer(int fd) {
+  int64_t val;
+  (void)read(fd, &val, 8);
 }
 #endif
 
@@ -55,6 +59,16 @@ void Co1(Coroutine* c) {
 #if defined(__APPLE__)
   int fd = kqueue();
 #elif defined(__linux__)
+  struct itimerspec new_value;
+  struct timespec now;
+  clock_gettime(CLOCK_REALTIME, &now);
+  new_value.it_value.tv_sec = now.tv_sec;
+  new_value.it_value.tv_nsec = now.tv_nsec;
+  new_value.it_interval.tv_sec = 0;
+  new_value.it_interval.tv_nsec = 100000000;
+  int fd = timerfd_create(CLOCK_REALTIME, 0);
+  timerfd_settime(fd, TFD_TIMER_ABSTIME, &new_value, NULL);
+
 #endif
   while (CoroutineIsAlive(&generator)) {
     int value = 0;
@@ -89,6 +103,7 @@ void Reader(Coroutine* c) {
       printf("EOF\n");
       break;
     }
+    buf[n] = '\0';
     printf("Received: %s", buf);
   }
   close(pipes[0]);
