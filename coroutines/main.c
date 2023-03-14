@@ -14,8 +14,13 @@
 
 #include <unistd.h>
 
+#if defined(__linux__)
+#include <sys/timerfd.h>
+#endif
+
 int pipes[2];
 
+#if defined(__APPLE__)
 static void NewTimer(int kq, int millis) {
   struct kevent e;
 
@@ -29,6 +34,14 @@ static void ClearTimer(int kq) {
   EV_SET(&e, 1, EVFILT_TIMER, EV_DELETE, 0, 0, 0);
   kevent(kq, &e, 1, NULL, 0, NULL);
 }
+#elif defined(__linux__)
+
+static void NewTimer(int fd, int millis) {
+}
+
+static void ClearTimer(int fd) {
+}
+#endif
 
 void Generator(Coroutine* c) {
   for (int i = 1; i < 5; i++) {
@@ -39,15 +52,18 @@ void Generator(Coroutine* c) {
 void Co1(Coroutine* c) {
   Coroutine generator;
   CoroutineInit(&generator, c->machine, Generator);
-  int kq = kqueue();
+#if defined(__APPLE__)
+  int fd = kqueue();
+#elif defined(__linux__)
+#endif
   while (CoroutineIsAlive(&generator)) {
     int value = 0;
     CoroutineCall(c, &generator, &value, sizeof(value));
     if (CoroutineIsAlive(&generator)) {
       printf("Value: %d\n", value);
-      NewTimer(kq, 100);
-      CoroutineWait(c, kq, POLLIN);
-      ClearTimer(kq);
+      NewTimer(fd, 100);
+      CoroutineWait(c, fd, POLLIN);
+      ClearTimer(fd);
     }
   }
   CoroutineDestruct(&generator);
