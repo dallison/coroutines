@@ -12,9 +12,9 @@
 #include "bitset.h"
 
 #if defined(__APPLE__)
-#include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
+#include <sys/types.h>
 
 #elif defined(__linux__)
 #include <sys/eventfd.h>
@@ -22,13 +22,6 @@
 #else
 #error "Unknown operating system"
 #endif
-
-#if defined(__aarch64__)
-#define GET_STACK_POINTER() \
-  void* sp; \
-  asm("mov %0, sp" : "=r" (sp));
-#endif
-
 
 static int NewEventFd() {
   int event_fd;
@@ -53,7 +46,7 @@ static void TriggerEvent(int fd) {
 #if defined(__APPLE__)
   struct kevent e;
   EV_SET(&e, 1, EVFILT_USER, EV_ADD, NOTE_TRIGGER, 0, NULL);
-  kevent(fd, &e, 1, 0, 0, 0); // Trigger USER event
+  kevent(fd, &e, 1, 0, 0, 0);  // Trigger USER event
 #elif defined(__linux__)
   int64_t val = 1;
   (void)write(fd, &val, 8);
@@ -66,24 +59,24 @@ static void ClearEvent(int fd) {
 #if defined(__APPLE__)
   struct kevent e;
   EV_SET(&e, 1, EVFILT_USER, EV_DELETE, NOTE_TRIGGER, 0, NULL);
-  kevent(fd, &e, 1, NULL, 0, 0); // Clear USER event
+  kevent(fd, &e, 1, NULL, 0, 0);  // Clear USER event
 #elif defined(__linux__)
   int64_t val;
   (void)read(fd, &val, 8);
 #else
 #error "Unknown operating system"
 #endif
-  struct pollfd f = {.fd = fd, .events = POLLIN};
-  int x = poll(&f, 1, 0);
 }
 
-void CoroutineInit(Coroutine* c,struct CoroutineMachine* machine,
+void CoroutineInit(Coroutine* c, struct CoroutineMachine* machine,
                    CoroutineFunctor functor) {
   CoroutineInitWithStackSize(c, machine, functor, kCoDefaultStackSize);
 }
 
-void CoroutineInitWithStackSize(Coroutine* c,struct CoroutineMachine* machine,
+void CoroutineInitWithStackSize(Coroutine* c, struct CoroutineMachine* machine,
                                 CoroutineFunctor functor, size_t stack_size) {
+  StringInit(&c->name, NULL);
+  StringPrintf(&c->name, "co-%d", machine->next_coroutine_id++);
   c->functor = functor;
   c->stack_size = stack_size;
   c->state = kCoNew;
@@ -100,24 +93,25 @@ void CoroutineInitWithStackSize(Coroutine* c,struct CoroutineMachine* machine,
   c->result = NULL;
   c->result_size = 0;
   c->user_data = NULL;
-  
+
   // Add to machine but do not start it.
   CoroutineMachineAddCoroutine(machine, c);
 }
 
-Coroutine* NewCoroutine(CoroutineMachine* machine,
-                                     CoroutineFunctor functor) {
+Coroutine* NewCoroutine(CoroutineMachine* machine, CoroutineFunctor functor) {
   return NewCoroutineWithStackSize(machine, functor, kCoDefaultStackSize);
 }
 
 Coroutine* NewCoroutineWithStackSize(CoroutineMachine* machine,
-                        CoroutineFunctor functor, size_t stack_size) {
+                                     CoroutineFunctor functor,
+                                     size_t stack_size) {
   Coroutine* c = malloc(sizeof(Coroutine));
   CoroutineInitWithStackSize(c, machine, functor, stack_size);
   return c;
 }
 
 void CoroutineDestruct(Coroutine* c) {
+  StringDestruct(&c->name);
   free(c->stack);
   CloseEventFd(c->event_fd.fd);
   CloseEventFd(c->wait_fd.fd);
@@ -128,9 +122,7 @@ void CoroutineDelete(Coroutine* c) {
   free(c);
 }
 
-void CoroutineExit(Coroutine* c) {
-  longjmp(c->exit, 1);
-}
+void CoroutineExit(Coroutine* c) { longjmp(c->exit, 1); }
 
 void CoroutineStart(Coroutine* c) {
   if (c->state == kCoNew) {
@@ -138,7 +130,9 @@ void CoroutineStart(Coroutine* c) {
   }
 }
 
-
+void CoroutineSetName(Coroutine* c, const char* name) {
+  StringSet(&c->name, name);
+}
 
 void CoroutineWait(Coroutine* c, int fd, int event_mask) {
   c->state = kCoWaiting;
@@ -149,13 +143,9 @@ void CoroutineWait(Coroutine* c, int fd, int event_mask) {
   }
 }
 
-void CoroutineTriggerEvent(Coroutine* c) {
-  TriggerEvent(c->event_fd.fd);
-}
+void CoroutineTriggerEvent(Coroutine* c) { TriggerEvent(c->event_fd.fd); }
 
-void CoroutineClearEvent(Coroutine* c) {
-  ClearEvent(c->event_fd.fd);
-}
+void CoroutineClearEvent(Coroutine* c) { ClearEvent(c->event_fd.fd); }
 
 static struct pollfd* GetPollFd(Coroutine* c) {
   static struct pollfd empty = {.fd = -1, .events = 0, .revents = 0};
@@ -172,9 +162,7 @@ static struct pollfd* GetPollFd(Coroutine* c) {
   }
 }
 
-bool CoroutineIsAlive(Coroutine* c) {
-  return c->state != kCoDead;
-}
+bool CoroutineIsAlive(Coroutine* c) { return c->state != kCoDead; }
 
 void CoroutineYield(Coroutine* c) {
   c->state = kCoYielded;
@@ -195,7 +183,7 @@ void CoroutineYieldValue(Coroutine* c, void* value) {
     // Tell caller that there's a value available.
     CoroutineTriggerEvent(c->caller);
   }
-  
+
   // Yield control to another coroutine but don't trigger a wakup event.
   // This will be done when another call is made.
   c->state = kCoYielded;
@@ -206,12 +194,13 @@ void CoroutineYieldValue(Coroutine* c, void* value) {
   // We get here when resumed from another call.
 }
 
-void CoroutineCall(Coroutine* c, Coroutine* callee, void* result, size_t result_size) {
+void CoroutineCall(Coroutine* c, Coroutine* callee, void* result,
+                   size_t result_size) {
   // Tell the callee that it's being called and where to store the value.
   callee->caller = c;
   callee->result = result;
   callee->result_size = result_size;
-  
+
   // Start the callee running if it's not already running.  If it's running
   // we trigger its event to wake it up.
   if (callee->state == kCoNew) {
@@ -233,20 +222,20 @@ void CoroutineCall(Coroutine* c, Coroutine* callee, void* result, size_t result_
 // This invokes the coroutine's functor and long jumps to the exit environment.
 // The coroutine's stack pointer is set to the allocated stack and restored
 // aferwards.
-static void SwitchStackAndRun(void* sp, CoroutineFunctor f, void* arg, jmp_buf exit) {
+static void SwitchStackAndRun(void* sp, CoroutineFunctor f, void* arg,
+                              jmp_buf exit) {
 #if defined(__aarch64__)
-  asm(
-      "mov x12, sp\n"     // Save current stack pointer.
-      "mov x13, x29\n"    // Save current frame pointer
-      "mov x29, #0\n"     // FP = 0
-      "sub sp, %0, #32\n"      // Set new stack pointer.
+  asm("mov x12, sp\n"      // Save current stack pointer.
+      "mov x13, x29\n"     // Save current frame pointer
+      "mov x29, #0\n"      // FP = 0
+      "sub sp, %0, #32\n"  // Set new stack pointer.
       "stp x12, x13, [sp, #16]\n"
       "str %3, [sp]\n"
-      "mov x0, %2\n"      // Load arg to functor
-      "blr %1\n"          // Invoke functor on new stack
+      "mov x0, %2\n"  // Load arg to functor
+      "blr %1\n"      // Invoke functor on new stack
       "ldr x0, [sp]\n"
       "ldp x12, x29, [sp, #16]\n"
-      "mov sp, x12\n"     // Restore stack pointer
+      "mov sp, x12\n"  // Restore stack pointer
       "mov w1, #1\n"
 #if defined(__APPLE__)
       "bl _longjmp\n"
@@ -254,8 +243,7 @@ static void SwitchStackAndRun(void* sp, CoroutineFunctor f, void* arg, jmp_buf e
       "bl longjmp\n"
 #endif
       : /* no output regs*/
-      : "r" (sp), "r" (f), "r" (arg), "r" (exit)
-      );
+      : "r"(sp), "r"(f), "r"(arg), "r"(exit));
 #else
 #error "Unknown architecture"
 #endif
@@ -293,12 +281,11 @@ void CoroutineSetUserData(Coroutine* c, void* user_data) {
   c->user_data = user_data;
 }
 
-void* CoroutineGetUserData(Coroutine* c) {
-  return c->user_data;
-}
+void* CoroutineGetUserData(Coroutine* c) { return c->user_data; }
 
 void CoroutineMachineInit(CoroutineMachine* m) {
   ListInit(&m->coroutines);
+  m->next_coroutine_id = 1;
   m->current = NULL;
   m->running = false;
   m->pollfds = NULL;
@@ -307,8 +294,8 @@ void CoroutineMachineInit(CoroutineMachine* m) {
   VectorInit(&m->blocked_coroutines);
   m->interrupt_fd.fd = NewEventFd();
   m->interrupt_fd.events = POLLIN;
+  m->rand_seed = 6502;
 }
-
 
 static void AddPollFd(CoroutineMachine* m, struct pollfd* fd) {
   if (m->num_pollfds >= m->pollfd_capacity) {
@@ -320,16 +307,13 @@ static void AddPollFd(CoroutineMachine* m, struct pollfd* fd) {
   m->num_pollfds++;
 }
 
-
-
 static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
   m->num_pollfds = 0;
   AddPollFd(m, &m->interrupt_fd);
   VectorClear(&m->blocked_coroutines);
   for (ListElement* e = m->coroutines.first; e != NULL; e = e->next) {
     Coroutine* c = (Coroutine*)e;
-    if (c->state == kCoNew ||
-      c->state == kCoRunning || c->state == kCoDead) {
+    if (c->state == kCoNew || c->state == kCoRunning || c->state == kCoDead) {
       continue;
     }
     struct pollfd* fd = GetPollFd(c);
@@ -341,13 +325,13 @@ static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
       CoroutineTriggerEvent(c);
     }
   }
-  
+
   // Wait for coroutines (or the interrupt fd) to trigger.
   int e = poll(m->pollfds, m->num_pollfds, -1);
   if (e == 0) {
     return NULL;
   }
-  
+
   if (m->interrupt_fd.revents != 0) {
     // Interrupted.
     ClearEvent(m->interrupt_fd.fd);
@@ -363,13 +347,13 @@ static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
     if (fd->revents != 0) {
       if ((fd->revents & POLLHUP) != 0) {
         // Hangup means we have a closed file descriptor.  Coroutine is done.
-        Coroutine* c = m->blocked_coroutines.value.p[i-1];
+        Coroutine* c = m->blocked_coroutines.value.p[i - 1];
         c->state = kCoDead;
       }
-      BitSetInsert(&runnables, i-1);
+      BitSetInsert(&runnables, i - 1);
     }
   }
-  
+
   // Pick a random runnable coroutine.  If there is more than one runnable,
   // we avoid choosing the one that last yielded.
   BitSetIterator it;
@@ -377,7 +361,7 @@ static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
   Coroutine* chosen = NULL;
   bool done = false;
   while (!done) {
-    int j = rand() % num_runnables;
+    int j = rand_r(&m->rand_seed) % num_runnables;
     int iteration = 0;
     BitSetIteratorStart(&it, &runnables);
     done = true;
@@ -418,7 +402,7 @@ void CoroutineMachineRun(CoroutineMachine* m) {
     }
     setjmp(m->yield);
     // We get here any time a coroutine yields or waits.
-    
+
     Coroutine* c = GetRunnableCoroutine(m);
     m->current = c;
     if (c != NULL) {
