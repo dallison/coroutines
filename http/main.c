@@ -32,15 +32,15 @@ static void SendToClient(Coroutine* c, const char* response, size_t length) {
   ClientData* data = CoroutineGetUserData(c);
   int offset = 0;
   while (length > 0) {
+    // Wait until we can send to the network.  This will yield to other
+    // coroutines and we will be resumed when we can write.
     CoroutineWait(c, data->fd, POLLOUT);
     ssize_t n = write(data->fd, response + offset, length);
     if (n == -1) {
       perror("write");
-      close(data->fd);
       return;
     }
     if (n == 0) {
-      close(data->fd);
       return;
     }
     length -= n;
@@ -57,7 +57,8 @@ void Server(Coroutine* c) {
   for (;;) {
     char buf[64];
 
-    // Wait for data to arrive.
+    // Wait for data to arrive.  This will yield to other coroutines and
+    // we will resume when data is available to read.
     CoroutineWait(c, data->fd, POLLIN);
     ssize_t n = read(data->fd, buf, sizeof(buf));
     if (n == -1) {
@@ -66,8 +67,9 @@ void Server(Coroutine* c) {
       return;
     }
     if (n == 0) {
-      // EOF
+      // EOF while reading header, nothing we can do.
       close(data->fd);
+      BufferDestruct(&buffer);
       return;
     }
     // Append to data buffer.
@@ -81,7 +83,7 @@ void Server(Coroutine* c) {
 
   // Parse the header.
   size_t i = 0;
-  // Find the \r\n at the end of the first line
+  // Find the \r\n at the end of the first line.
   while (i < buffer.length && buffer.value[i] != '\r') {
     i++;
   }
@@ -214,15 +216,19 @@ void Listener(Coroutine* c) {
   // to handle each one.  All coroutines run "in parallel", cooperating with
   // each other.  No threading here.
   for (;;) {
-    // Wait for incoming connection.
+    // Wait for incoming connection.  This allows other coroutines to run
+    // while we are waiting.
     CoroutineWait(c, s, POLLIN);
 
+    // Allocate client data from the heap.  This will be passed to the
+    // server coroutine, which will take ownership of it.
     ClientData* data = malloc(sizeof(ClientData));
     data->sender_len = sizeof(struct sockaddr_in);
 
     data->fd = accept(s, (struct sockaddr*)&data->sender, &data->sender_len);
     if (data->fd == -1) {
       perror("accept");
+      free(data);
       continue;
     }
 
@@ -233,7 +239,8 @@ void Listener(Coroutine* c) {
     // now owns the data.
     CoroutineSetUserData(server, data);
 
-    // Start the coroutine.
+    // Start the coroutine.  It will be added to the list of coroutines that
+    // are ready to run and will be run on the next yield or wait.
     CoroutineStart(server);
   }
 }
