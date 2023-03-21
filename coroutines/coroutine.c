@@ -430,3 +430,31 @@ void CoroutineMachineStop(CoroutineMachine* m) {
   m->running = false;
   TriggerEvent(m->interrupt_fd.fd);
 }
+
+void CoroutineMachineShow(CoroutineMachine* m) {
+  for (ListElement* e = m->coroutines.first; e != NULL; e = e->next) {
+    Coroutine* co = (Coroutine*)e;
+    const char* state = "unknown";
+    switch (co->state) {
+      case kCoNew:
+        state = "new";
+        break;
+      case kCoDead:
+        state = "dead";
+        break;
+      case kCoReady:
+        state = "ready";
+        break;
+      case kCoRunning:
+        state = "runnning";
+        break;
+      case kCoWaiting:
+        state = "waiting";
+        break;
+      case kCoYielded:
+        state = "yielded";
+        break;
+    }
+    fprintf(stderr, "Coroutine %s: state: %s\n", co->name.value, state);
+  }
+}

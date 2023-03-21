@@ -120,4 +120,7 @@ void CoroutineMachineStartCoroutine(Coroutine* c);
 
 void CoroutineMachineRun(CoroutineMachine* m);
 
+// Print the state of all the coroutines to stderr.
+void CoroutineMachineShow(CoroutineMachine* m);
+
 #endif /* coroutine_h */

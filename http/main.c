@@ -210,7 +210,7 @@ void Listener(Coroutine* c) {
   }
   listen(s, 10);
 
-  // Enter a loop accepting incomign connections and spawning coroutines
+  // Enter a loop accepting incoming connections and spawning coroutines
   // to handle each one.  All coroutines run "in parallel", cooperating with
   // each other.  No threading here.
   for (;;) {
@@ -223,7 +223,7 @@ void Listener(Coroutine* c) {
     data->fd = accept(s, (struct sockaddr*)&data->sender, &data->sender_len);
     if (data->fd == -1) {
       perror("accept");
-      break;
+      continue;
     }
 
     // Make a coroutine to handle the connection.
@@ -236,7 +236,6 @@ void Listener(Coroutine* c) {
     // Start the coroutine.
     CoroutineStart(server);
   }
-  close(s);
 }
 
 int main(int argc, const char* argv[]) {
