@@ -243,7 +243,8 @@ static void SwitchStackAndRun(void* sp, CoroutineFunctor f, void* arg,
       "bl longjmp\n"
 #endif
       : /* no output regs*/
-      : "r"(sp), "r"(f), "r"(arg), "r"(exit));
+      : "r"(sp), "r"(f), "r"(arg), "r"(exit)
+      : "x12", "x13"
       );
 #elif defined(__x86_64__)
   asm(
@@ -265,6 +266,7 @@ static void SwitchStackAndRun(void* sp, CoroutineFunctor f, void* arg,
       "callq longjmp\n"
       : /* no output regs*/
       : "r"(sp), "r"(f), "r"(arg), "r"(exit)
+      : "%r14", "%r15"
       );
 #else
 #error "Unknown architecture"
