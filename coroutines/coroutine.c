@@ -244,6 +244,28 @@ static void SwitchStackAndRun(void* sp, CoroutineFunctor f, void* arg,
 #endif
       : /* no output regs*/
       : "r"(sp), "r"(f), "r"(arg), "r"(exit));
+      );
+#elif defined(__x86_64__)
+  asm(
+      "movq %%rsp, %%r14\n"     // Save current stack pointer.
+      "movq %%rbp, %%r15\n"    // Save current frame pointer
+      "movq $0, %%rbp\n"     // FP = 0
+      "movq %0, %%rsp\n"
+      "pushq %%r14\n"		// Push rsp
+      "pushq %%r15\n"		// Push rbp
+      "pushq %3\n"		// Push env
+      "subq $8, %%rsp\n"	// Align to 16
+      "movq %2, %%rdi\n"
+      "callq *%1\n"
+      "addq $8, %%rsp\n"	// Remove alignment.
+      "popq %%rdi\n"		// Pop env
+      "popq %%rbp\n"
+      "popq %%rsp\n"
+      "movl $1, %%esi\n"
+      "callq longjmp\n"
+      : /* no output regs*/
+      : "r"(sp), "r"(f), "r"(arg), "r"(exit)
+      );
 #else
 #error "Unknown architecture"
 #endif
