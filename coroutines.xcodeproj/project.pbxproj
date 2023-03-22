@@ -21,6 +21,7 @@
 		E5F728C929CACD0200D91851 /* libco.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E5F7289829C91FA400D91851 /* libco.a */; };
 		E5F728D229CB6AEC00D91851 /* buffer.c in Sources */ = {isa = PBXBuildFile; fileRef = E5F728CC29CB6AC600D91851 /* buffer.c */; };
 		E5F728D329CB6AF100D91851 /* map.c in Sources */ = {isa = PBXBuildFile; fileRef = E5F728CD29CB6AC600D91851 /* map.c */; };
+		E5F728D529CBB1CB00D91851 /* Makefile in Sources */ = {isa = PBXBuildFile; fileRef = E5F728D429CBB1CB00D91851 /* Makefile */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -100,6 +101,7 @@
 		E5F728CD29CB6AC600D91851 /* map.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = map.c; sourceTree = "<group>"; };
 		E5F728CE29CB6AC600D91851 /* map.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = map.h; sourceTree = "<group>"; };
 		E5F728CF29CB6AC600D91851 /* buffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = buffer.h; sourceTree = "<group>"; };
+		E5F728D429CBB1CB00D91851 /* Makefile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -147,6 +149,7 @@
 		E5F7285729BF95E500D91851 = {
 			isa = PBXGroup;
 			children = (
+				E5F728D429CBB1CB00D91851 /* Makefile */,
 				E5F7286229BF95E500D91851 /* coroutines */,
 				E5F728A829C9200D00D91851 /* http */,
 				E5F728C329CACCEF00D91851 /* client */,
@@ -374,6 +377,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E5F728D529CBB1CB00D91851 /* Makefile in Sources */,
 				E5F7286429BF95E500D91851 /* main.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
