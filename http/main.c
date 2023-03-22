@@ -31,11 +31,16 @@ typedef struct {
 static void SendToClient(Coroutine* c, const char* response, size_t length) {
   ClientData* data = CoroutineGetUserData(c);
   int offset = 0;
+  const size_t kMaxLength = 1024;
   while (length > 0) {
     // Wait until we can send to the network.  This will yield to other
     // coroutines and we will be resumed when we can write.
     CoroutineWait(c, data->fd, POLLOUT);
-    ssize_t n = write(data->fd, response + offset, length);
+    size_t nbytes = length;
+    if (nbytes > kMaxLength) {
+      nbytes = kMaxLength;
+    }
+    ssize_t n = write(data->fd, response + offset, nbytes);
     if (n == -1) {
       perror("write");
       return;
@@ -48,8 +53,70 @@ static void SendToClient(Coroutine* c, const char* response, size_t length) {
   }
 }
 
+static void ReadHeaders(Buffer* buffer, Vector* header, Map* http_headers) {
+  // Parse the header.
+  size_t i = 0;
+  // Find the \r\n at the end of the first line.
+  while (i < buffer->length && buffer->value[i] != '\r') {
+    i++;
+  }
+  String header_line;
+  StringInitFromSegment(&header_line, buffer->value, i);
+  i += 2;  // Skip \r\n.
+
+  // Parse the header line.  By splitting it at space into String objects
+  // allocated from the heap.
+  StringSplit(&header_line, ' ', header);
+
+  // Don't need this now.
+  StringDestruct(&header_line);
+
+  // Extract MIME headers.  Holds pointers to the data in the buffer.  Does
+  // not own the pointers.
+  while (i < buffer->length) {
+    if (buffer->value[i] == '\r') {
+      // End of headers is a blank line.
+      i += 2;
+      break;
+    }
+    char* name = &buffer->value[i];
+    while (i < buffer->length && buffer->value[i] != ':') {
+      // Convert name to upper case as they are case insensitive.
+      buffer->value[i] = toupper(buffer->value[i]);
+      i++;
+    }
+    // No header value, end of headers.
+    if (i == buffer->length) {
+      break;
+    }
+    buffer->value[i] = '\0';  // Replace : by EOL
+    i++;
+    // Skip to non-space.
+    while (i < buffer->length && isspace(buffer->value[i])) {
+      i++;
+    }
+    char* value = &buffer->value[i];
+    while (i < buffer->length) {
+      if (i < buffer->length + 3 && buffer->value[i] == '\r') {
+        // Check for continuation with a space as the first character on the
+        // next line.  TAB too.
+        if (buffer->value[i+2] != ' ' && buffer->value[i+2] != '\t' ) {
+          break;
+        }
+      } else if (buffer->value[i] == '\r') {
+        // No continuation, check for end of value.
+        break;
+      }
+      i++;
+    }
+    buffer->value[i] = '\0';  // Replace \r by EOL
+    i += 2;
+    MapKeyValue kv = {.key.p = name, .value.p = value};
+    MapInsert(http_headers, kv);
+  }
+}
+
 void Server(Coroutine* c) {
-  printf("Coroutine %s started\n", c->name.value);
   ClientData* data = CoroutineGetUserData(c);
   Buffer buffer = {0};
 
@@ -81,64 +148,30 @@ void Server(Coroutine* c) {
     }
   }
 
-  // Parse the header.
-  size_t i = 0;
-  // Find the \r\n at the end of the first line.
-  while (i < buffer.length && buffer.value[i] != '\r') {
-    i++;
-  }
-  String header;
-  StringInitFromSegment(&header, buffer.value, i);
-  i += 2;  // Skip \r\n.
+  Vector header = {0};
+  Map http_headers;
+  MapInitForCharPointerKeys(&http_headers);
 
-  // Parse the header line.  By splitting it at space into String objects
-  // allocated from the heap.
-  Vector http_header = {0};
-  StringSplit(&header, ' ', &http_header);
-
+  ReadHeaders(&buffer, &header, &http_headers);
+  
   // These are the indexes into the http_header for the fields.
   const size_t kMethod = 0;
   const size_t kFilename = 1;
   const size_t kProtocol = 2;
 
   // Make alises for the http header fields.
-  String* method = http_header.value.p[kMethod];
-  String* filename = http_header.value.p[kFilename];
-  String* protocol = http_header.value.p[kProtocol];
-
-  // Don't need this now.
-  StringDestruct(&header);
-
-  // Extract MIME headers.  Holds pointers to the data in the buffer.  Does
-  // not own the pointers.
-  Map mime_headers;
-  MapInitForCharPointerKeys(&mime_headers);
-  while (i < buffer.length) {
-    char* name = &buffer.value[i];
-    while (i < buffer.length && buffer.value[i] != ':') {
-      i++;
-    }
-    // No header value, end of headers.
-    if (i == buffer.length) {
-      break;
-    }
-    buffer.value[i] = '\0';  // Replace : by EOL
-    i++;
-    // Skip to non-space.
-    while (i < buffer.length && isspace(buffer.value[i])) {
-      i++;
-    }
-    char* value = &buffer.value[i];
-    while (i < buffer.length && buffer.value[i] != '\r') {
-      i++;
-    }
-    buffer.value[i] = '\0';  // Replace \r by EOL
-    i += 2;
-    MapKeyValue kv = {.key.p = name, .value.p = value};
-    MapInsert(&mime_headers, kv);
-  }
-
+  String* method = header.value.p[kMethod];
+  String* filename = header.value.p[kFilename];
+  String* protocol = header.value.p[kProtocol];
   String response = {0};
+
+  MapKeyType k = {.p = "HOST"};
+  const char* hostname = MapFind(&http_headers, k);
+  if (hostname == NULL) {
+    hostname = "unknown";
+  }
+  printf("%s: %s for %s from %s\n", c->name.value,
+         method->value, filename->value, hostname);
 
   // Only support the GET method for now.
   if (StringEqual(method, "GET")) {
@@ -186,10 +219,9 @@ void Server(Coroutine* c) {
   close(data->fd);
   free(data);
   BufferDestruct(&buffer);
-  MapDestruct(&mime_headers);
-  VectorDestructWithContents(&http_header,
+  MapDestruct(&http_headers);
+  VectorDestructWithContents(&header,
                              (VectorElementDestructor)StringDestruct, true);
-  printf("Coroutine %s ended\n", c->name.value);
 }
 
 void Listener(Coroutine* c) {
@@ -232,12 +264,9 @@ void Listener(Coroutine* c) {
       continue;
     }
 
-    // Make a coroutine to handle the connection.
-    Coroutine* server = NewCoroutine(c->machine, Server);
-
-    // Put the ClientData into the coroutine's user data.  The coroutine
+    // Make a coroutine to handle the connection. The coroutine
     // now owns the data.
-    CoroutineSetUserData(server, data);
+    Coroutine* server = NewCoroutineWithUserData(c->machine, Server, data);
 
     // Start the coroutine.  It will be added to the list of coroutines that
     // are ready to run and will be run on the next yield or wait.

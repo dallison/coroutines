@@ -39,6 +39,8 @@ typedef struct Coroutine {
   CoroutineFunctor functor;  // Coroutine body.
   CoroutineState state;
   void* stack;  // Stack, allocated from malloc.
+  void* yielded_address;     // Address at which we've yielded.
+  bool needs_free;           // Needs to be freed when done.
   size_t stack_size;
   jmp_buf resume;          // Program environemnt for resuming.
   jmp_buf exit;            // Program environemt to exit.
@@ -59,12 +61,23 @@ void CoroutineInit(Coroutine* c, struct CoroutineMachine* machine,
 void CoroutineInitWithStackSize(Coroutine* c, struct CoroutineMachine* machine,
                                 CoroutineFunctor functor, size_t stack_size);
 
+void CoroutineInitWithUserData(Coroutine* c, struct CoroutineMachine* machine,
+                   CoroutineFunctor functor, void* user_data);
+void CoroutineInitWithStackSizeAndUserData(Coroutine* c, struct CoroutineMachine* machine,
+                                 CoroutineFunctor functor, size_t stack_size, void* user_data);
+
 // Allocate new coroutine on heap with default stack size.
 Coroutine* NewCoroutine(struct CoroutineMachine* machine,
                         CoroutineFunctor functor);
 Coroutine* NewCoroutineWithStackSize(struct CoroutineMachine* machine,
                                      CoroutineFunctor functor,
                                      size_t stack_size);
+
+Coroutine* NewCoroutineWithUserData(struct CoroutineMachine* machine,
+                        CoroutineFunctor functor, void* user_data);
+Coroutine* NewCoroutineWithStackSizeAndUserData(struct CoroutineMachine* machine,
+                                     CoroutineFunctor functor,
+                                     size_t stack_size, void* user_data);
 
 // Destruct a coroutine.
 void CoroutineDestruct(Coroutine* c);

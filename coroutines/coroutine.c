@@ -82,6 +82,8 @@ void CoroutineInitWithStackSize(Coroutine* c, struct CoroutineMachine* machine,
   c->state = kCoNew;
   c->machine = machine;
   c->stack = malloc(stack_size);
+  c->needs_free = false;
+  c->yielded_address = NULL;
   ListElementInit(&c->element);
   c->event_fd.fd = NewEventFd();
   c->event_fd.events = POLLIN;
@@ -99,7 +101,9 @@ void CoroutineInitWithStackSize(Coroutine* c, struct CoroutineMachine* machine,
 }
 
 Coroutine* NewCoroutine(CoroutineMachine* machine, CoroutineFunctor functor) {
-  return NewCoroutineWithStackSize(machine, functor, kCoDefaultStackSize);
+  Coroutine* c = NewCoroutineWithStackSize(machine, functor, kCoDefaultStackSize);
+  c->needs_free = true;
+  return c;
 }
 
 Coroutine* NewCoroutineWithStackSize(CoroutineMachine* machine,
@@ -107,6 +111,34 @@ Coroutine* NewCoroutineWithStackSize(CoroutineMachine* machine,
                                      size_t stack_size) {
   Coroutine* c = malloc(sizeof(Coroutine));
   CoroutineInitWithStackSize(c, machine, functor, stack_size);
+  return c;
+}
+
+void CoroutineInitWithUserData(Coroutine* c, struct CoroutineMachine* machine,
+                               CoroutineFunctor functor, void* user_data) {
+  CoroutineInit(c, machine, functor);
+  c->user_data = user_data;
+}
+
+void CoroutineInitWithStackSizeAndUserData(Coroutine* c, struct CoroutineMachine* machine,
+                                          CoroutineFunctor functor, size_t stack_size, void* user_data) {
+  CoroutineInitWithStackSize(c, machine, functor, stack_size);
+  c->user_data = user_data;
+}
+
+
+Coroutine* NewCoroutineWithUserData(struct CoroutineMachine* machine,
+                                    CoroutineFunctor functor, void* user_data) {
+  Coroutine* c = NewCoroutine(machine, functor);
+  c->user_data = user_data;
+  return c;
+}
+
+Coroutine* NewCoroutineWithStackSizeAndUserData(struct CoroutineMachine* machine,
+                                     CoroutineFunctor functor,
+                                                size_t stack_size, void* user_data) {
+  Coroutine* c = NewCoroutineWithStackSize(machine, functor, stack_size);
+  c->user_data = user_data;
   return c;
 }
 
@@ -138,9 +170,11 @@ void CoroutineWait(Coroutine* c, int fd, int event_mask) {
   c->state = kCoWaiting;
   c->wait_fd.fd = fd;
   c->wait_fd.events = event_mask;
+  c->yielded_address = __builtin_return_address(0);
   if (setjmp(c->resume) == 0) {
     longjmp(c->machine->yield, 1);
   }
+  c->wait_fd.fd = -1;
 }
 
 void CoroutineTriggerEvent(Coroutine* c) { TriggerEvent(c->event_fd.fd); }
@@ -166,6 +200,7 @@ bool CoroutineIsAlive(Coroutine* c) { return c->state != kCoDead; }
 
 void CoroutineYield(Coroutine* c) {
   c->state = kCoYielded;
+  c->yielded_address = __builtin_return_address(0);
   if (setjmp(c->resume) == 0) {
     CoroutineTriggerEvent(c);
     longjmp(c->machine->yield, 1);
@@ -277,6 +312,7 @@ static void Resume(Coroutine* c) {
   switch (c->state) {
     case kCoReady:
       c->state = kCoRunning;
+      c->yielded_address = NULL;
       if (setjmp(c->exit) == 0) {
         SwitchStackAndRun(c->stack + c->stack_size, c->functor, c, c->exit);
       }
@@ -287,16 +323,25 @@ static void Resume(Coroutine* c) {
       // Functor returned, we are dead.
       c->state = kCoDead;
       CoroutineMachineRemoveCoroutine(c->machine, c);
+      
+      // Destruct the coroutine, freeing the memory if necessary.
+      if (c->needs_free) {
+        CoroutineDelete(c);
+      } else {
+        CoroutineDestruct(c);
+      }
       break;
     case kCoYielded:
     case kCoWaiting:
-    case kCoDead:
       c->state = kCoRunning;
       longjmp(c->resume, 1);
       break;
     case kCoRunning:
     case kCoNew:
       // Should never get here.
+      break;
+    case kCoDead:
+      longjmp(c->exit, 1);
       break;
   }
 }
@@ -369,15 +414,10 @@ static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
   for (size_t i = 1; i < m->num_pollfds; i++) {
     struct pollfd* fd = &m->pollfds[i];
     if (fd->revents != 0) {
-      if ((fd->revents & POLLHUP) != 0) {
-        // Hangup means we have a closed file descriptor.  Coroutine is done.
-        Coroutine* c = m->blocked_coroutines.value.p[i - 1];
-        c->state = kCoDead;
-      }
       BitSetInsert(&runnables, i - 1);
     }
   }
-
+  
   // Pick a random runnable coroutine.  If there is more than one runnable,
   // we avoid choosing the one that last yielded.
   BitSetIterator it;
@@ -479,6 +519,7 @@ void CoroutineMachineShow(CoroutineMachine* m) {
         state = "yielded";
         break;
     }
-    fprintf(stderr, "Coroutine %s: state: %s\n", co->name.value, state);
+    fprintf(stderr, "Coroutine %s: state: %s at address: %p\n",
+            co->name.value, state, co->yielded_address);
   }
 }
