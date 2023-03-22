@@ -79,7 +79,6 @@ void Co1(Coroutine* c) {
       ClearTimer(fd);
     }
   }
-  CoroutineDestruct(&generator);
 }
 
 void Writer(Coroutine* c) {
