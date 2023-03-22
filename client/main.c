@@ -334,16 +334,17 @@ void Client(Coroutine* c) {
         fprintf(stderr,
                 "Don't know how many bytes to read, no Content-length in "
                 "headers\n");
-      } else
+      } else {
         ReadContents(c, fd, &buffer, i, content_length, true);
+      }
     }
   }
-}
-close(fd);
-BufferDestruct(&buffer);
-MapDestruct(&http_headers);
-VectorDestructWithContents(&header, (VectorElementDestructor)StringDestruct,
-                           true);
+
+  close(fd);
+  BufferDestruct(&buffer);
+  MapDestruct(&http_headers);
+  VectorDestructWithContents(&header, (VectorElementDestructor)StringDestruct,
+                             true);
 }
 
 int main(int argc, const char* argv[]) {
@@ -384,15 +385,16 @@ int main(int argc, const char* argv[]) {
     Usage();
   }
 
-  CoroutineMachine m;
-  CoroutineMachineInit(&m);
-
   struct hostent* entry = gethostbyname(host.value);
   if (entry == NULL) {
     fprintf(stderr, "unknown host %s\n", host.value);
     exit(1);
   }
   in_addr_t ipaddr = ((struct in_addr*)entry->h_addr_list[0])->s_addr;
+
+  CoroutineMachine m;
+  CoroutineMachineInit(&m);
+
   ServerData server_data = {ipaddr = ipaddr, .filename = &filename};
   for (int i = 0; i < num_jobs; i++) {
     Coroutine* client = NewCoroutineWithUserData(&m, Client, &server_data);
