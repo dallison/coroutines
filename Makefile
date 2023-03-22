@@ -1,7 +1,7 @@
 
 CC = clang
 CFLAGS = -g
-OBJS = coroutines/coroutine.o coroutines/vector.o coroutines/bitset.o coroutines/list.o 
+OBJS = coroutines/coroutine.o coroutines/vector.o coroutines/bitset.o coroutines/list.o coroutines/map.o coroutines/buffer.o coroutines/dstring.o
 
 LIB = libco.so
 EXE = co
