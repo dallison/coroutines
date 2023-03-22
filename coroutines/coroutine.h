@@ -102,12 +102,14 @@ void CoroutineClearEvent(Coroutine* c);
 void CoroutineExit(Coroutine* c);
 
 void CoroutineSetName(Coroutine* c, const char* name);
+const char* CoroutineGetName(Coroutine* c);
+
 void CoroutineSetUserData(Coroutine* c, void* user_data);
 void* CoroutineGetUserData(Coroutine* c);
 
 void CoroutineCall(Coroutine* c, Coroutine* callee, void* result,
                    size_t result_size);
-bool CoroutineIsAlive(Coroutine* c);
+bool CoroutineIsAlive(Coroutine* c, Coroutine* query);
 
 typedef struct CoroutineMachine {
   List coroutines;

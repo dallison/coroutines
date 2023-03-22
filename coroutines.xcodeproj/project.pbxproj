@@ -102,6 +102,7 @@
 		E5F728CE29CB6AC600D91851 /* map.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = map.h; sourceTree = "<group>"; };
 		E5F728CF29CB6AC600D91851 /* buffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = buffer.h; sourceTree = "<group>"; };
 		E5F728D429CBB1CB00D91851 /* Makefile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
+		E5F728D629CBB5CE00D91851 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -149,6 +150,7 @@
 		E5F7285729BF95E500D91851 = {
 			isa = PBXGroup;
 			children = (
+				E5F728D629CBB5CE00D91851 /* README.md */,
 				E5F728D429CBB1CB00D91851 /* Makefile */,
 				E5F7286229BF95E500D91851 /* coroutines */,
 				E5F728A829C9200D00D91851 /* http */,

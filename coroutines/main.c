@@ -69,10 +69,10 @@ void Co1(Coroutine* c) {
   timerfd_settime(fd, TFD_TIMER_ABSTIME, &new_value, NULL);
 
 #endif
-  while (CoroutineIsAlive(&generator)) {
+  while (CoroutineIsAlive(c, &generator)) {
     int value = 0;
     CoroutineCall(c, &generator, &value, sizeof(value));
-    if (CoroutineIsAlive(&generator)) {
+    if (CoroutineIsAlive(c, &generator)) {
       printf("Value: %d\n", value);
       NewTimer(fd, 100);
       CoroutineWait(c, fd, POLLIN);

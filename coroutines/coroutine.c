@@ -168,6 +168,10 @@ void CoroutineSetName(Coroutine* c, const char* name) {
   StringSet(&c->name, name);
 }
 
+const char* CoroutineGetName(Coroutine* c) {
+  return c->name.value;
+}
+
 void CoroutineWait(Coroutine* c, int fd, int event_mask) {
   c->state = kCoWaiting;
   c->wait_fd.fd = fd;
@@ -198,7 +202,16 @@ static struct pollfd* GetPollFd(Coroutine* c) {
   }
 }
 
-bool CoroutineIsAlive(Coroutine* c) { return c->state != kCoDead; }
+// TODO: improve this for scaling number of coroutines.
+bool CoroutineIsAlive(Coroutine* c, Coroutine* query) {
+  for (ListElement* e = c->machine->coroutines.first; e != NULL; e = e->next) {
+    Coroutine* co = (Coroutine*)e;
+    if (co == query) {
+      return true;
+    }
+  }
+  return false;
+}
 
 void CoroutineYield(Coroutine* c) {
   c->state = kCoYielded;
