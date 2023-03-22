@@ -10,8 +10,8 @@
 #define vector_h
 
 #include <stdbool.h>
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 // Vector of 64-bit values.  This is a dynamic array.  The array will
 // be expanded as space is exhausted.  The Vector does not own anything
@@ -20,8 +20,8 @@
 //
 typedef struct Vector {
   union {
-    void** p;       // Pointers.
-    int64_t* w;     // 64-bit values.
+    void** p;    // Pointers.
+    int64_t* w;  // 64-bit values.
   } value;
   size_t length;    // Number of pointers in memory.
   size_t capacity;  // Number of pointers we have space for.
@@ -50,8 +50,7 @@ void VectorDelete(Vector* vec);
 // for each element.  The destructor is called for each element but it should
 // not free the element.  Id free_element is true, his function will free the
 // element, in which case the elements must be allocated using malloc.
-void VectorDestructWithContents(Vector* vec,
-                                VectorElementDestructor destructor,
+void VectorDestructWithContents(Vector* vec, VectorElementDestructor destructor,
                                 bool free_element);
 void VectorDeleteWithContents(Vector* vec, VectorElementDestructor destructor,
                               bool free_element);

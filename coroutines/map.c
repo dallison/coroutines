@@ -47,41 +47,33 @@ static int CompareCharPointersCaseBlind(const void* a, const void* b) {
   return strcasecmp(v1->key.p, v2->key.p);
 }
 
-static int CompareMappedInt64s(const void*a, const void* b) {
+static int CompareMappedInt64s(const void* a, const void* b) {
   const MapKeyValue* s1 = a;
   const MapKeyValue* s2 = b;
   return (int)(s1->key.w - s2->key.w);
 }
 
-static int CompareMappedPointers(const void*a, const void* b) {
+static int CompareMappedPointers(const void* a, const void* b) {
   const MapKeyValue* s1 = a;
   const MapKeyValue* s2 = b;
   return (int)(s1->key.p - s2->key.p);
 }
 
-void MapInitForStringKeys(Map* map) {
-  MapInit(map,  CompareStrings);
-}
+void MapInitForStringKeys(Map* map) { MapInit(map, CompareStrings); }
 
 void MapInitForCaseBlindStringKeys(Map* map) {
-  MapInit(map,  CompareStringsCaseBlind);
+  MapInit(map, CompareStringsCaseBlind);
 }
 
-void MapInitForPointerKeys(Map* map) {
-  MapInit(map,  CompareMappedPointers);
-}
+void MapInitForPointerKeys(Map* map) { MapInit(map, CompareMappedPointers); }
 
-void MapInitForCharPointerKeys(Map* map) {
-  MapInit(map,  CompareCharPointers);
-}
+void MapInitForCharPointerKeys(Map* map) { MapInit(map, CompareCharPointers); }
 
 void MapInitForCaseBlindCharPointerKeys(Map* map) {
-  MapInit(map,  CompareCharPointersCaseBlind);
+  MapInit(map, CompareCharPointersCaseBlind);
 }
 
-void MapInitForInt64Keys(Map* map) {
-  MapInit(map,  CompareMappedInt64s);
-}
+void MapInitForInt64Keys(Map* map) { MapInit(map, CompareMappedInt64s); }
 
 Map* NewMap(MapKeyCompareFunc compare_func) {
   Map* map = malloc(sizeof(Map));
@@ -89,21 +81,13 @@ Map* NewMap(MapKeyCompareFunc compare_func) {
   return map;
 }
 
-Map* NewMapForStringKeys(void) {
-  return NewMap(CompareStrings);
-}
+Map* NewMapForStringKeys(void) { return NewMap(CompareStrings); }
 
-Map* NewMapForCharPointerKeys(void) {
-  return NewMap(CompareCharPointers);
-}
+Map* NewMapForCharPointerKeys(void) { return NewMap(CompareCharPointers); }
 
-Map* NewMapForInt64Keys(void) {
-  return NewMap(CompareMappedInt64s);
-}
+Map* NewMapForInt64Keys(void) { return NewMap(CompareMappedInt64s); }
 
-Map* NewMapForPointerKeys(void) {
-  return NewMap(CompareMappedPointers);
-}
+Map* NewMapForPointerKeys(void) { return NewMap(CompareMappedPointers); }
 
 Map* NewMapForCaseBlindStringKeys(void) {
   return NewMap(CompareStringsCaseBlind);
@@ -136,8 +120,7 @@ void MapClone(Map* dest, Map* src) {
   dest->compare = src->compare;
 }
 
-void MapDestructWithContents(Map* map,
-                             void (*func)(MapKeyValue *kv)) {
+void MapDestructWithContents(Map* map, void (*func)(MapKeyValue* kv)) {
   for (size_t i = 0; i < map->length; i++) {
     if (func != NULL) {
       func(&map->values[i]);
@@ -146,8 +129,7 @@ void MapDestructWithContents(Map* map,
   MapDestruct(map);
 }
 
-void MapDeleteWithContents(Map* map,
-                           void (*func)(MapKeyValue* kv)) {
+void MapDeleteWithContents(Map* map, void (*func)(MapKeyValue* kv)) {
   MapDestructWithContents(map, func);
   free(map);
 }
@@ -351,8 +333,7 @@ void MapPrint(Map* map, void (*printer)(const MapKeyValue* kv)) {
   printf("}");
 }
 
-void MapTraverse(Map* map,
-                 void (*func)(MapKeyValue* kv, void* data),
+void MapTraverse(Map* map, void (*func)(MapKeyValue* kv, void* data),
                  void* data) {
   for (size_t i = 0; i < map->length; i++) {
     func(&map->values[i], data);

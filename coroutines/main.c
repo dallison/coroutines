@@ -9,9 +9,9 @@
 #include "coroutine.h"
 
 #if defined(__APPLE__)
-#include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #endif
 
 #include <unistd.h>
@@ -38,8 +38,7 @@ static void ClearTimer(int kq) {
 }
 #elif defined(__linux__)
 
-static void NewTimer(int fd, int millis) {
-}
+static void NewTimer(int fd, int millis) {}
 
 static void ClearTimer(int fd) {
   int64_t val;
@@ -109,9 +108,9 @@ void Reader(Coroutine* c) {
   close(pipes[0]);
 }
 
-int main(int argc, const char * argv[]) {
+int main(int argc, const char* argv[]) {
   pipe(pipes);
-  
+
   CoroutineMachine m;
   CoroutineMachineInit(&m);
   Coroutine* c1 = NewCoroutine(&m, Co1);
@@ -125,6 +124,6 @@ int main(int argc, const char * argv[]) {
   CoroutineStart(writer);
 
   CoroutineMachineRun(&m);
-  
+
   CoroutineMachineDestruct(&m);
 }

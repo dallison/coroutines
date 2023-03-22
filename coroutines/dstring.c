@@ -9,12 +9,12 @@
 #include "dstring.h"
 #include "vector.h"
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <assert.h>
 
 static void LazyInit(String* str) {
   if (str == NULL) {
@@ -86,13 +86,10 @@ String* NewStringWithLength(const char* init, size_t length) {
   return s;
 }
 
-String* NewEmptyString(void) {
-  return NewString(NULL);
-}
+String* NewEmptyString(void) { return NewString(NULL); }
 
 void StringDestruct(String* str) {
-  if (str->capacity != STRING_IMMUTABLE &&
-      str->value != str->buffer) {
+  if (str->capacity != STRING_IMMUTABLE && str->value != str->buffer) {
     free(str->value);
   }
   str->value = NULL;
@@ -133,7 +130,6 @@ int StringCompareCaseBlind(String* str1, const char* str2) {
   LazyInit(str1);
   return strcasecmp(str1->value, str2);
 }
-
 
 bool StringEqualString(String* str1, String* str2) {
   LazyInit(str1);
@@ -276,7 +272,8 @@ void StringAppendChar(String* str, char ch) {
   str->value[str->length] = '\0';
 }
 
-void StringReplace(String* str, size_t pos, size_t len, const char* p, size_t plen) {
+void StringReplace(String* str, size_t pos, size_t len, const char* p,
+                   size_t plen) {
   CheckMutable(str);
   ssize_t len_diff = plen - len;
   size_t new_length = str->length + len_diff + 1;
@@ -286,7 +283,7 @@ void StringReplace(String* str, size_t pos, size_t len, const char* p, size_t pl
     // the memory for each additional char.  So double the amount of
     // memory needed each time we grow.
     new_length *= 2;
-    
+
     if (str->value == str->buffer) {
       // Moving from buffer, allocate memory and copy the buffer in to it.
       str->value = malloc(new_length);
@@ -297,13 +294,11 @@ void StringReplace(String* str, size_t pos, size_t len, const char* p, size_t pl
     }
     str->capacity = new_length;
   }
-  
+
   // Move tail up or down in memory
   size_t tail_length = str->length - (pos + len) + 1;
   if (tail_length > 0) {
-    memmove(&str->value[pos + plen],
-            &str->value[pos + len],
-            tail_length);
+    memmove(&str->value[pos + plen], &str->value[pos + len], tail_length);
   }
   // Copy in new string.
   if (plen > 0) {
@@ -450,14 +445,13 @@ void StringSplit(String* s, char sep, Vector* v) {
   size_t i = 0;
   while (i < s->length) {
     size_t start = i;
-    
+
     while (i < s->length && s->value[i] != sep) {
       i++;
     }
     String* part = NewString(NULL);
     StringAppendSegment(part, &s->value[start], i - start);
     VectorAppend(v, part);
-    i++;    // Skip separator.
+    i++;  // Skip separator.
   }
 }
-

@@ -77,10 +77,8 @@ void MapDelete(Map* map);
 void MapClear(Map* map);
 void MapCopy(Map* dest, Map* src);
 
-void MapDestructWithContents(Map* map,
-                             void (*func)(MapKeyValue* kv));
-void MapDeleteWithContents(Map* map,
-                             void (*func)(MapKeyValue* kv));
+void MapDestructWithContents(Map* map, void (*func)(MapKeyValue* kv));
+void MapDeleteWithContents(Map* map, void (*func)(MapKeyValue* kv));
 
 // Removes the key from the map, returning the value being removed if the
 // removal was successful. If the removal was unsuccessful (the key was not
@@ -105,8 +103,7 @@ void* MapFindInt64Key(Map* map, int64_t key);
 MapValueType* MapSearch(Map* map, MapKeyType key);
 
 void MapPrint(Map* map, void (*printer)(const MapKeyValue* kv));
-void MapTraverse(Map* map,
-                 void (*func)(MapKeyValue* kv, void* data),
+void MapTraverse(Map* map, void (*func)(MapKeyValue* kv, void* data),
                  void* data);
 
 #endif /* map_h */

@@ -5,20 +5,20 @@
 //  Created by David Allison on 3/21/23.
 //
 
-#include <stdio.h>
-#include "coroutine.h"
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netdb.h>
 #include <netinet/in.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include "dstring.h"
 #include "buffer.h"
+#include "coroutine.h"
+#include "dstring.h"
 #include "map.h"
 #include "vector.h"
-#include <netdb.h>
 
 void Usage(void) {
   fprintf(stderr, "usage: client -j <jobs> <host> <filename>\n");
@@ -26,13 +26,13 @@ void Usage(void) {
 }
 
 typedef struct {
-  in_addr_t ipaddr;   // IP address for server (IPv4).
-  String* filename;   // File to get (not owned by this struct).
+  in_addr_t ipaddr;  // IP address for server (IPv4).
+  String* filename;  // File to get (not owned by this struct).
 } ServerData;
 
 // Send data to the server from a coroutine.
-static bool SendToServer(Coroutine* c,
-                         int fd, const char* response, size_t length) {
+static bool SendToServer(Coroutine* c, int fd, const char* response,
+                         size_t length) {
   int offset = 0;
   const size_t kMaxLength = 1024;
   while (length > 0) {
@@ -57,13 +57,16 @@ static bool SendToServer(Coroutine* c,
   return true;
 }
 
-
 static size_t ReadHeaders(Buffer* buffer, Vector* header, Map* http_headers) {
   // Parse the header.
   size_t i = 0;
   // Find the \r\n at the end of the first line.
   while (i < buffer->length && buffer->value[i] != '\r') {
     i++;
+  }
+  if (i == buffer->length) {
+    // No header line.
+    return i;
   }
   String header_line;
   StringInitFromSegment(&header_line, buffer->value, i);
@@ -105,7 +108,7 @@ static size_t ReadHeaders(Buffer* buffer, Vector* header, Map* http_headers) {
       if (i < buffer->length + 3 && buffer->value[i] == '\r') {
         // Check for continuation with a space as the first character on the
         // next line.  TAB too.
-        if (buffer->value[i+2] != ' ' && buffer->value[i+2] != '\t' ) {
+        if (buffer->value[i + 2] != ' ' && buffer->value[i + 2] != '\t') {
           break;
         }
       } else if (buffer->value[i] == '\r') {
@@ -122,7 +125,8 @@ static size_t ReadHeaders(Buffer* buffer, Vector* header, Map* http_headers) {
   return i;
 }
 
-static size_t ReadContents(Coroutine*c, int fd, Buffer* buffer, size_t i, int length, bool write_to_output) {
+static size_t ReadContents(Coroutine* c, int fd, Buffer* buffer, size_t i,
+                           int length, bool write_to_output) {
   while (length > 0) {
     if (i < buffer->length) {
       // Data remaining in buffer
@@ -156,7 +160,8 @@ static size_t ReadContents(Coroutine*c, int fd, Buffer* buffer, size_t i, int le
   return i;
 }
 
-static size_t ReadChunkLength(Coroutine* c, int fd, Buffer* buffer, size_t i, int* length) {
+static size_t ReadChunkLength(Coroutine* c, int fd, Buffer* buffer, size_t i,
+                              int* length) {
   for (;;) {
     char ch;
     if (i < buffer->length) {
@@ -194,7 +199,8 @@ static size_t ReadChunkLength(Coroutine* c, int fd, Buffer* buffer, size_t i, in
   return i;
 }
 
-static void ReadChunkedContents(Coroutine* c, int fd, Buffer* buffer, size_t i) {
+static void ReadChunkedContents(Coroutine* c, int fd, Buffer* buffer,
+                                size_t i) {
   for (;;) {
     // First line is the length of the chunk in hex.
     int length = 0;
@@ -203,16 +209,15 @@ static void ReadChunkedContents(Coroutine* c, int fd, Buffer* buffer, size_t i) 
       break;
     }
     i = ReadContents(c, fd, buffer, i, length, true);
-    
+
     // Chunk is followed by a CRLF.  Don't print this, just skip it.
     i = ReadContents(c, fd, buffer, i, 2, false);
   }
 }
 
-
 void Client(Coroutine* c) {
   ServerData* data = CoroutineGetUserData(c);
-  
+
   int fd = socket(PF_INET, SOCK_STREAM, 0);
   if (fd == -1) {
     perror("socket");
@@ -230,18 +235,19 @@ void Client(Coroutine* c) {
     return;
   }
   String request = {0};
-  
+
   char hostname[256];
   gethostname(hostname, sizeof(hostname));
-  
-  StringPrintf(&request, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", data->filename->value, hostname);
+
+  StringPrintf(&request, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n",
+               data->filename->value, hostname);
   bool ok = SendToServer(c, fd, request.value, request.length);
   if (!ok) {
     fprintf(stderr, "Failed to send to server: %s\n", strerror(errno));
     close(fd);
     return;
   }
-  
+
   Buffer buffer = {0};
 
   // Read incoming HTTP request and parse it.
@@ -271,14 +277,14 @@ void Client(Coroutine* c) {
       break;
     }
   }
-  
+
   Vector header = {0};
   Map http_headers;
   MapInitForCharPointerKeys(&http_headers);
 
   // The buffer contains the HTTP header line and the HTTP headers.
   size_t i = ReadHeaders(&buffer, &header, &http_headers);
-  
+
   const size_t kProtocol = 0;
   const size_t kStatus = 1;
   const size_t kError = 2;
@@ -308,12 +314,13 @@ void Client(Coroutine* c) {
     MapKeyType k = {.p = "TRANSFER-ENCODING"};
     const char* transfer_encoding = MapFind(&http_headers, k);
     bool is_chunked = false;
-    int content_length = 0;
-    if (transfer_encoding != NULL && strcmp(transfer_encoding, "chunked") == 0) {
+    int content_length = -1;
+    if (transfer_encoding != NULL &&
+        strcmp(transfer_encoding, "chunked") == 0) {
       is_chunked = true;
     } else {
       MapKeyType k = {.p = "CONTENT-LENGTH"};
-      const char *v = MapFind(&http_headers, k);
+      const char* v = MapFind(&http_headers, k);
       if (v != NULL) {
         content_length = (int)strtoll(v, NULL, 10);
       }
@@ -323,17 +330,23 @@ void Client(Coroutine* c) {
     if (is_chunked) {
       ReadChunkedContents(c, fd, &buffer, i);
     } else {
-      ReadContents(c, fd, &buffer, i, content_length, true);
+      if (content_length == -1) {
+        fprintf(stderr,
+                "Don't know how many bytes to read, no Content-length in "
+                "headers\n");
+      } else
+        ReadContents(c, fd, &buffer, i, content_length, true);
     }
   }
-  close(fd);
-  BufferDestruct(&buffer);
-  MapDestruct(&http_headers);
-  VectorDestructWithContents(&header,
-                             (VectorElementDestructor)StringDestruct, true);
+}
+close(fd);
+BufferDestruct(&buffer);
+MapDestruct(&http_headers);
+VectorDestructWithContents(&header, (VectorElementDestructor)StringDestruct,
+                           true);
 }
 
-int main(int argc, const char * argv[]) {
+int main(int argc, const char* argv[]) {
   String host = {};
   String filename = {};
   int num_jobs = 1;
@@ -370,7 +383,7 @@ int main(int argc, const char * argv[]) {
   if (host.length == 0 || filename.length == 0) {
     Usage();
   }
-  
+
   CoroutineMachine m;
   CoroutineMachineInit(&m);
 
@@ -389,4 +402,4 @@ int main(int argc, const char * argv[]) {
   // Run the main loop
   CoroutineMachineRun(&m);
   CoroutineMachineDestruct(&m);
-  }
+}

@@ -37,11 +37,11 @@ void BufferClear(Buffer* buf) { buf->length = 0; }
 static void ExpandMemory(Buffer* buf, size_t new_length) {
   buf->capacity = new_length * 2;
   if (buf->value == NULL) {
-     buf->value = calloc(buf->capacity, 1);
-   } else {
-     buf->value = realloc(buf->value, buf->capacity);
-     memset(&buf->value[buf->length], 0, buf->capacity - buf->length);
-   }
+    buf->value = calloc(buf->capacity, 1);
+  } else {
+    buf->value = realloc(buf->value, buf->capacity);
+    memset(&buf->value[buf->length], 0, buf->capacity - buf->length);
+  }
 }
 
 void BufferAppend(Buffer* buf, char* value, size_t length) {
@@ -100,7 +100,6 @@ void BufferFill(Buffer* buf, size_t length, char value) {
   memset(&buf->value[buf->length], value, length);
   buf->length = new_length;
 }
-
 
 void BufferAlignLength(Buffer* buf, int alignment) {
   size_t new_length = (buf->length + (alignment - 1)) & ~(alignment - 1);

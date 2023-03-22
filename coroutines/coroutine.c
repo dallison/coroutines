@@ -101,7 +101,8 @@ void CoroutineInitWithStackSize(Coroutine* c, struct CoroutineMachine* machine,
 }
 
 Coroutine* NewCoroutine(CoroutineMachine* machine, CoroutineFunctor functor) {
-  Coroutine* c = NewCoroutineWithStackSize(machine, functor, kCoDefaultStackSize);
+  Coroutine* c =
+      NewCoroutineWithStackSize(machine, functor, kCoDefaultStackSize);
   c->needs_free = true;
   return c;
 }
@@ -120,12 +121,13 @@ void CoroutineInitWithUserData(Coroutine* c, struct CoroutineMachine* machine,
   c->user_data = user_data;
 }
 
-void CoroutineInitWithStackSizeAndUserData(Coroutine* c, struct CoroutineMachine* machine,
-                                          CoroutineFunctor functor, size_t stack_size, void* user_data) {
+void CoroutineInitWithStackSizeAndUserData(Coroutine* c,
+                                           struct CoroutineMachine* machine,
+                                           CoroutineFunctor functor,
+                                           size_t stack_size, void* user_data) {
   CoroutineInitWithStackSize(c, machine, functor, stack_size);
   c->user_data = user_data;
 }
-
 
 Coroutine* NewCoroutineWithUserData(struct CoroutineMachine* machine,
                                     CoroutineFunctor functor, void* user_data) {
@@ -134,9 +136,9 @@ Coroutine* NewCoroutineWithUserData(struct CoroutineMachine* machine,
   return c;
 }
 
-Coroutine* NewCoroutineWithStackSizeAndUserData(struct CoroutineMachine* machine,
-                                     CoroutineFunctor functor,
-                                                size_t stack_size, void* user_data) {
+Coroutine* NewCoroutineWithStackSizeAndUserData(
+    struct CoroutineMachine* machine, CoroutineFunctor functor,
+    size_t stack_size, void* user_data) {
   Coroutine* c = NewCoroutineWithStackSize(machine, functor, stack_size);
   c->user_data = user_data;
   return c;
@@ -279,30 +281,27 @@ static void SwitchStackAndRun(void* sp, CoroutineFunctor f, void* arg,
 #endif
       : /* no output regs*/
       : "r"(sp), "r"(f), "r"(arg), "r"(exit)
-      : "x12", "x13"
-      );
+      : "x12", "x13");
 #elif defined(__x86_64__)
-  asm(
-      "movq %%rsp, %%r14\n"     // Save current stack pointer.
-      "movq %%rbp, %%r15\n"    // Save current frame pointer
+  asm("movq %%rsp, %%r14\n"  // Save current stack pointer.
+      "movq %%rbp, %%r15\n"  // Save current frame pointer
       "movq $0, %%rbp\n"     // FP = 0
       "movq %0, %%rsp\n"
-      "pushq %%r14\n"		// Push rsp
-      "pushq %%r15\n"		// Push rbp
-      "pushq %3\n"		// Push env
-      "subq $8, %%rsp\n"	// Align to 16
+      "pushq %%r14\n"     // Push rsp
+      "pushq %%r15\n"     // Push rbp
+      "pushq %3\n"        // Push env
+      "subq $8, %%rsp\n"  // Align to 16
       "movq %2, %%rdi\n"
       "callq *%1\n"
-      "addq $8, %%rsp\n"	// Remove alignment.
-      "popq %%rdi\n"		// Pop env
+      "addq $8, %%rsp\n"  // Remove alignment.
+      "popq %%rdi\n"      // Pop env
       "popq %%rbp\n"
       "popq %%rsp\n"
       "movl $1, %%esi\n"
       "callq longjmp\n"
       : /* no output regs*/
       : "r"(sp), "r"(f), "r"(arg), "r"(exit)
-      : "%r14", "%r15"
-      );
+      : "%r14", "%r15");
 #else
 #error "Unknown architecture"
 #endif
@@ -323,7 +322,7 @@ static void Resume(Coroutine* c) {
       // Functor returned, we are dead.
       c->state = kCoDead;
       CoroutineMachineRemoveCoroutine(c->machine, c);
-      
+
       // Destruct the coroutine, freeing the memory if necessary.
       if (c->needs_free) {
         CoroutineDelete(c);
@@ -417,7 +416,7 @@ static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
       BitSetInsert(&runnables, i - 1);
     }
   }
-  
+
   // Pick a random runnable coroutine.  If there is more than one runnable,
   // we avoid choosing the one that last yielded.
   BitSetIterator it;
@@ -519,7 +518,7 @@ void CoroutineMachineShow(CoroutineMachine* m) {
         state = "yielded";
         break;
     }
-    fprintf(stderr, "Coroutine %s: state: %s at address: %p\n",
-            co->name.value, state, co->yielded_address);
+    fprintf(stderr, "Coroutine %s: state: %s at address: %p\n", co->name.value,
+            state, co->yielded_address);
   }
 }

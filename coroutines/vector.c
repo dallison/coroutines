@@ -38,8 +38,8 @@ void VectorDelete(Vector* vec) {
   free(vec);
 }
 
-void VectorDestructWithContents(Vector* vec,
-                                VectorElementDestructor destructor, bool free_element) {
+void VectorDestructWithContents(Vector* vec, VectorElementDestructor destructor,
+                                bool free_element) {
   for (size_t i = 0; i < vec->length; i++) {
     if (vec->value.p[i] == NULL) {
       continue;
@@ -54,14 +54,16 @@ void VectorDestructWithContents(Vector* vec,
   VectorDestruct(vec);
 }
 
-void VectorDeleteWithContents(Vector* vec, VectorElementDestructor destructor, bool free_element) {
+void VectorDeleteWithContents(Vector* vec, VectorElementDestructor destructor,
+                              bool free_element) {
   VectorDestructWithContents(vec, destructor, free_element);
   free(vec);
 }
 
 void VectorClear(Vector* vec) { vec->length = 0; }
 
-void VectorClearWithContents(Vector* vec, VectorElementDestructor destructor, bool free_element) {
+void VectorClearWithContents(Vector* vec, VectorElementDestructor destructor,
+                             bool free_element) {
   for (size_t i = 0; i < vec->length; i++) {
     if (vec->value.p[i] == NULL) {
       continue;
@@ -96,7 +98,8 @@ static void MakeSpace(Vector* vec) {
 
 void VectorReserve(Vector* vec, size_t n) {
   if (vec->value.p == NULL) {
-    vec->capacity = n;;
+    vec->capacity = n;
+    ;
     vec->value.p = malloc(sizeof(int64_t) * vec->capacity);
     memset(vec->value.p, 0, sizeof(int64_t) * vec->capacity);
   }

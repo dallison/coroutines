@@ -60,6 +60,10 @@ static void ReadHeaders(Buffer* buffer, Vector* header, Map* http_headers) {
   while (i < buffer->length && buffer->value[i] != '\r') {
     i++;
   }
+  if (i == buffer->length) {
+    // No header line.
+    return;
+  }
   String header_line;
   StringInitFromSegment(&header_line, buffer->value, i);
   i += 2;  // Skip \r\n.
@@ -100,7 +104,7 @@ static void ReadHeaders(Buffer* buffer, Vector* header, Map* http_headers) {
       if (i < buffer->length + 3 && buffer->value[i] == '\r') {
         // Check for continuation with a space as the first character on the
         // next line.  TAB too.
-        if (buffer->value[i+2] != ' ' && buffer->value[i+2] != '\t' ) {
+        if (buffer->value[i + 2] != ' ' && buffer->value[i + 2] != '\t') {
           break;
         }
       } else if (buffer->value[i] == '\r') {
@@ -153,7 +157,7 @@ void Server(Coroutine* c) {
   MapInitForCharPointerKeys(&http_headers);
 
   ReadHeaders(&buffer, &header, &http_headers);
-  
+
   // These are the indexes into the http_header for the fields.
   const size_t kMethod = 0;
   const size_t kFilename = 1;
@@ -170,8 +174,8 @@ void Server(Coroutine* c) {
   if (hostname == NULL) {
     hostname = "unknown";
   }
-  printf("%s: %s for %s from %s\n", c->name.value,
-         method->value, filename->value, hostname);
+  printf("%s: %s for %s from %s\n", c->name.value, method->value,
+         filename->value, hostname);
 
   // Only support the GET method for now.
   if (StringEqual(method, "GET")) {
@@ -220,8 +224,8 @@ void Server(Coroutine* c) {
   free(data);
   BufferDestruct(&buffer);
   MapDestruct(&http_headers);
-  VectorDestructWithContents(&header,
-                             (VectorElementDestructor)StringDestruct, true);
+  VectorDestructWithContents(&header, (VectorElementDestructor)StringDestruct,
+                             true);
 }
 
 void Listener(Coroutine* c) {

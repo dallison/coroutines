@@ -140,7 +140,8 @@ bool StringStartsWith(String* s, const char* prefix);
 bool StringEndsWith(String* s, const char* suffix);
 
 void StringSplit(String* s, char sep, struct Vector* v);
-void StringReplace(String* str, size_t pos, size_t len, const char* p, size_t plen);
+void StringReplace(String* str, size_t pos, size_t len, const char* p,
+                   size_t plen);
 void StringReplaceString(String* str, size_t pos, size_t len, String* p);
 void StringErase(String* str, size_t pos, size_t len);
 
