@@ -296,7 +296,7 @@ void Client(Coroutine* c) {
   // Check for valid status.
   int status_value = atoi(status->value);
   if (status_value != 200) {
-    fprintf(stderr, "Error: %d: ", status_value);
+    fprintf(stderr, "%s Error: %d: ", protocol->value, status_value);
     // Print all error strings.
     const char* sep = "";
     for (size_t i = kError; i < header.length; i++) {
