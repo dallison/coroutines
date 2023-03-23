@@ -7,7 +7,7 @@ This is a simple prototype coroutines library written in C.
 A coroutine is a cooperative multitasking object.  It is basically a function
 that executes in parallel with other functions in the single threaded
 program.  A coroutine is never preempted by the kernel in order to give
-another coroutine the CPU.  All context switched between coroutines are
+another coroutine the CPU.  All context switches between coroutines are
 volunatary.
 
 ## Why coroutines?
@@ -221,7 +221,7 @@ where one coroutine calls another, which generates a value and yields back
 control to the caller.  Then, when another call is made, a new value is
 generated, etc.
 
-This is supported by this implementation usign the following functions:
+This is supported by this implementation using the following functions:
 
 1. CoroutineCall
 1. CoroutineYieldValue
