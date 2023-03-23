@@ -8,7 +8,7 @@ A coroutine is a cooperative multitasking object.  It is basically a function
 that executes in parallel with other functions in the single threaded
 program.  A coroutine is never preempted by the kernel in order to give
 another coroutine the CPU.  All context switches between coroutines are
-volunatary.
+voluntary.
 
 ## Why coroutines?
 Because multithreading is almost impossible to get right and the cause,
