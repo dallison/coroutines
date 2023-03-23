@@ -118,7 +118,6 @@ typedef struct CoroutineMachine {
   List coroutines;
   BitSet coroutine_ids;
   size_t next_coroutine_id;
-  Coroutine* current;
   jmp_buf yield;
   bool running;
   struct pollfd* pollfds;

@@ -367,7 +367,6 @@ void CoroutineMachineInit(CoroutineMachine* m) {
   ListInit(&m->coroutines);
   BitSetInit(&m->coroutine_ids);
   m->next_coroutine_id = 0;
-  m->current = NULL;
   m->running = false;
   m->pollfds = NULL;
   m->pollfd_capacity = 0;
@@ -487,7 +486,6 @@ void CoroutineMachineRun(CoroutineMachine* m) {
     // We get here any time a coroutine yields or waits.
 
     Coroutine* c = GetRunnableCoroutine(m);
-    m->current = c;
     if (c != NULL) {
       Resume(c);
     }
