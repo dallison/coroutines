@@ -76,7 +76,8 @@ void CoroutineInit(Coroutine* c, struct CoroutineMachine* machine,
 void CoroutineInitWithStackSize(Coroutine* c, struct CoroutineMachine* machine,
                                 CoroutineFunctor functor, size_t stack_size) {
   StringInit(&c->name, NULL);
-  StringPrintf(&c->name, "co-%d", machine->next_coroutine_id++);
+  c->id = CoroutineMachineAllocateId(machine);
+  StringPrintf(&c->name, "co-%d", c->id);
   c->functor = functor;
   c->stack_size = stack_size;
   c->state = kCoNew;
@@ -95,6 +96,7 @@ void CoroutineInitWithStackSize(Coroutine* c, struct CoroutineMachine* machine,
   c->result = NULL;
   c->result_size = 0;
   c->user_data = NULL;
+  c->last_tick = 0;
 
   // Add to machine but do not start it.
   CoroutineMachineAddCoroutine(machine, c);
@@ -177,6 +179,7 @@ void CoroutineWait(Coroutine* c, int fd, int event_mask) {
   c->wait_fd.fd = fd;
   c->wait_fd.events = event_mask;
   c->yielded_address = __builtin_return_address(0);
+  c->last_tick = c->machine->tick_count;
   if (setjmp(c->resume) == 0) {
     longjmp(c->machine->yield, 1);
   }
@@ -202,20 +205,14 @@ static struct pollfd* GetPollFd(Coroutine* c) {
   }
 }
 
-// TODO: improve this for scaling number of coroutines.
 bool CoroutineIsAlive(Coroutine* c, Coroutine* query) {
-  for (ListElement* e = c->machine->coroutines.first; e != NULL; e = e->next) {
-    Coroutine* co = (Coroutine*)e;
-    if (co == query) {
-      return true;
-    }
-  }
-  return false;
+  return BitSetContains(&c->machine->coroutine_ids, query->id);
 }
 
 void CoroutineYield(Coroutine* c) {
   c->state = kCoYielded;
   c->yielded_address = __builtin_return_address(0);
+  c->last_tick = c->machine->tick_count;
   if (setjmp(c->resume) == 0) {
     CoroutineTriggerEvent(c);
     longjmp(c->machine->yield, 1);
@@ -237,6 +234,7 @@ void CoroutineYieldValue(Coroutine* c, void* value) {
   // Yield control to another coroutine but don't trigger a wakup event.
   // This will be done when another call is made.
   c->state = kCoYielded;
+  c->last_tick = c->machine->tick_count;
   if (setjmp(c->resume) == 0) {
     longjmp(c->machine->yield, 1);
     // Never get here.
@@ -259,6 +257,7 @@ void CoroutineCall(Coroutine* c, Coroutine* callee, void* result,
     CoroutineTriggerEvent(callee);
   }
   c->state = kCoYielded;
+  c->last_tick = c->machine->tick_count;
   if (setjmp(c->resume) == 0) {
     longjmp(c->machine->yield, 1);
     // Never get here.
@@ -366,7 +365,8 @@ void* CoroutineGetUserData(Coroutine* c) { return c->user_data; }
 
 void CoroutineMachineInit(CoroutineMachine* m) {
   ListInit(&m->coroutines);
-  m->next_coroutine_id = 1;
+  BitSetInit(&m->coroutine_ids);
+  m->next_coroutine_id = 0;
   m->current = NULL;
   m->running = false;
   m->pollfds = NULL;
@@ -375,7 +375,7 @@ void CoroutineMachineInit(CoroutineMachine* m) {
   VectorInit(&m->blocked_coroutines);
   m->interrupt_fd.fd = NewEventFd();
   m->interrupt_fd.events = POLLIN;
-  m->rand_seed = 6502;
+  m->tick_count = 0;
 }
 
 static void AddPollFd(CoroutineMachine* m, struct pollfd* fd) {
@@ -386,6 +386,14 @@ static void AddPollFd(CoroutineMachine* m, struct pollfd* fd) {
   }
   m->pollfds[m->num_pollfds] = *fd;
   m->num_pollfds++;
+}
+
+static int CompareTick(const void* a, const void* b) {
+  Coroutine* const* c1 = a;
+  Coroutine* const* c2 = b;
+  uint64_t t1 = (*c1)->machine->tick_count - (*c1)->last_tick;
+  uint64_t t2 = (*c2)->machine->tick_count -  (*c2)->last_tick;
+  return (int)(t2 - t1);
 }
 
 static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
@@ -408,11 +416,14 @@ static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
   }
 
   // Wait for coroutines (or the interrupt fd) to trigger.
-  int e = poll(m->pollfds, m->num_pollfds, -1);
-  if (e == 0) {
+  int num_ready = poll(m->pollfds, m->num_pollfds, -1);
+  if (num_ready <= 0) {
     return NULL;
   }
 
+  // One more tick.
+  m->tick_count++;
+  
   if (m->interrupt_fd.revents != 0) {
     // Interrupted.
     ClearEvent(m->interrupt_fd.fd);
@@ -421,43 +432,34 @@ static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
     // If we have been asked to stop, there's nothing else to do.
     return NULL;
   }
-  BitSet runnables = {0};
-  // We have a number of pollfds ready.  Pick one fairly.
+  
+  // Schedule the next coroutine to run.  This scheduler chooses the
+  // coroutine that has been waiting longest.  Unless they are just new
+  // no two coroutines can have been waiting for the same amount of time.
+  // This is a completely fair scheduler with all coroutines given the
+  // same priority.
+  //
+  // We could use malloc/free here but that is a memory allocation.  The
+  // use of alloca or a VLA is much faster, albeit not in POSIX.
+  //
+  // If you want this to be more portable, call malloc or calloc and free it
+  // after the chosen coroutine is determined.
+#ifndef __cplusplus__
+  Coroutine* runnables[num_ready];      // VLA: C99
+#else
+  Coroutine** runnables = alloca(num_ready * sizeof(Coroutine*));
+#endif
+  size_t index = 0;
   for (size_t i = 1; i < m->num_pollfds; i++) {
     struct pollfd* fd = &m->pollfds[i];
     if (fd->revents != 0) {
-      BitSetInsert(&runnables, i - 1);
+      runnables[index++] = m->blocked_coroutines.value.p[i-1];
     }
   }
+  
+  qsort(runnables, index, sizeof(Coroutine*), CompareTick);
+  Coroutine* chosen = runnables[0];
 
-  // Pick a random runnable coroutine.  If there is more than one runnable,
-  // we avoid choosing the one that last yielded.
-  BitSetIterator it;
-  size_t num_runnables = BitSetCount(&runnables);
-  Coroutine* chosen = NULL;
-  bool done = false;
-  while (!done) {
-    int j = rand_r(&m->rand_seed) % num_runnables;
-    int iteration = 0;
-    BitSetIteratorStart(&it, &runnables);
-    done = true;
-    while (!BitSetIteratorDone(&it)) {
-      if (iteration == j) {
-        chosen = m->blocked_coroutines.value.p[BitSetIteratorValue(&it)];
-        if (num_runnables != 1 && chosen == m->current &&
-            chosen->state == kCoYielded) {
-          // Don't choose coroutine that just yielded if there is
-          // another one.
-          done = false;
-          chosen = NULL;
-        }
-        break;
-      }
-      BitSetIteratorNext(&it);
-      iteration++;
-    }
-  }
-  BitSetDestruct(&runnables);
   if (chosen != NULL) {
     CoroutineClearEvent(chosen);
   }
@@ -466,6 +468,7 @@ static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
 
 void CoroutineMachineDestruct(CoroutineMachine* m) {
   ListDestruct(&m->coroutines);
+  BitSetDestruct(&m->coroutine_ids);
   CloseEventFd(m->interrupt_fd.fd);
 }
 
@@ -497,9 +500,19 @@ void CoroutineMachineRemoveCoroutine(CoroutineMachine* m, Coroutine* c) {
     Coroutine* co = (Coroutine*)e;
     if (co == c) {
       ListDeleteElement(&m->coroutines, e);
+      BitSetRemove(&m->coroutine_ids, c->id);
       return;
     }
   }
+}
+
+size_t CoroutineMachineAllocateId(CoroutineMachine* m) {
+  size_t id = BitSetFindFirstClear(&m->coroutine_ids);
+  if (id == (size_t)-1) {
+    id = m->next_coroutine_id++;
+  }
+  BitSetInsert(&m->coroutine_ids, id);
+  return id;
 }
 
 void CoroutineMachineStop(CoroutineMachine* m) {
@@ -531,7 +544,7 @@ void CoroutineMachineShow(CoroutineMachine* m) {
         state = "yielded";
         break;
     }
-    fprintf(stderr, "Coroutine %s: state: %s at address: %p\n", co->name.value,
+    fprintf(stderr, "Coroutine %zd: %s: state: %s: address: %p\n", co->id, co->name.value,
             state, co->yielded_address);
   }
 }

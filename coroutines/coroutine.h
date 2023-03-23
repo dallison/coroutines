@@ -15,6 +15,7 @@
 #include "dstring.h"
 #include "list.h"
 #include "vector.h"
+#include "bitset.h"
 
 struct CoroutineMachine;
 struct Coroutine;
@@ -35,6 +36,7 @@ typedef enum {
 // It has its own stack.
 typedef struct Coroutine {
   ListElement element;       // Must be at offset 0.
+  size_t id;                 // Coroutine ID.
   String name;               // Optional name.
   CoroutineFunctor functor;  // Coroutine body.
   CoroutineState state;
@@ -51,6 +53,7 @@ typedef struct Coroutine {
   void* result;              // Where to put result in YieldValue.
   size_t result_size;        // Length of value to store.
   void* user_data;           // User data, not owned by this.
+  uint64_t last_tick;        // Tick count of last resume.
 } Coroutine;
 
 // Initialize a coroutine with the default stack size.
@@ -113,7 +116,8 @@ bool CoroutineIsAlive(Coroutine* c, Coroutine* query);
 
 typedef struct CoroutineMachine {
   List coroutines;
-  int next_coroutine_id;
+  BitSet coroutine_ids;
+  size_t next_coroutine_id;
   Coroutine* current;
   jmp_buf yield;
   bool running;
@@ -122,7 +126,7 @@ typedef struct CoroutineMachine {
   nfds_t num_pollfds;
   Vector blocked_coroutines;
   struct pollfd interrupt_fd;
-  uint32_t rand_seed;
+  uint64_t tick_count;
 } CoroutineMachine;
 
 void CoroutineMachineInit(CoroutineMachine* m);
@@ -130,6 +134,7 @@ CoroutineMachine* NewCoroutineMachine(void);
 void CoroutineMachineDestruct(CoroutineMachine* m);
 void CoroutineMachineDelete(CoroutineMachine* m);
 void CoroutineMachineStop(CoroutineMachine* m);
+size_t CoroutineMachineAllocateId(CoroutineMachine* m);
 
 void CoroutineMachineAddCoroutine(CoroutineMachine* m, Coroutine* c);
 void CoroutineMachineRemoveCoroutine(CoroutineMachine* m, Coroutine* c);

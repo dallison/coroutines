@@ -15,7 +15,7 @@
 #include "vector.h"
 
 typedef struct {
-  uint32_t* value;
+  uint64_t* value;
   size_t capacity;  // Capacity in words, not bytes.
 } BitSet;
 
@@ -37,6 +37,8 @@ void BitSetUnion(BitSet* set1, BitSet* set2, BitSet* result);
 void BitSetUnionInPlace(BitSet* dest, BitSet* src);
 
 bool BitSetEqual(BitSet* set1, BitSet* set2);
+size_t BitSetFindFirstSet(BitSet* set);
+size_t BitSetFindFirstClear(BitSet* set);
 
 // Expand the values in a bitset to a vector of ints.
 void BitSetExpand(BitSet* set, Vector* vec);
@@ -62,13 +64,13 @@ inline bool BitSetIteratorDone(BitSetIterator* it) {
   if (it->word_offset < (it->set->capacity - 1)) {
     return false;
   }
-  int32_t mask = (1 << it->bit_offset) - 1;
+  int64_t mask = (1 << it->bit_offset) - 1;
   return (it->set->value[it->word_offset] & ~mask) == 0;
 }
 
 void BitSetIteratorNext(BitSetIterator* it);
 inline size_t BitSetIteratorValue(BitSetIterator* it) {
-  return it->word_offset * 32 + it->bit_offset;
+  return it->word_offset * 64 + it->bit_offset;
 }
 
 // To use an iterator.

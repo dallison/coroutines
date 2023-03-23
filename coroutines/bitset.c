@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 void BitSetInit(BitSet* set) {
   set->value = NULL;
@@ -37,25 +38,25 @@ void BitSetClear(BitSet* set) {
   if (set->value == NULL) {
     return;
   }
-  memset(set->value, 0, set->capacity * sizeof(uint32_t));
+  memset(set->value, 0, set->capacity * sizeof(uint64_t));
 }
 
 static void CalculateIndexes(size_t index, size_t* word, size_t* bit) {
-  *word = index / 32;
-  *bit = index % 32;
+  *word = index / 64;
+  *bit = index % 64;
 }
 
 // Make room for an index into the set.
 static void MakeRoomFor(BitSet* set, size_t index) {
-  size_t words_required = (index + 32) / 32;
+  size_t words_required = (index + 64) / 64;
   if (set->value == NULL) {
-    set->value = calloc(words_required, sizeof(uint32_t));
+    set->value = calloc(words_required, sizeof(uint64_t));
     set->capacity = words_required;
   } else if (words_required > set->capacity) {
-    set->value = realloc(set->value, words_required * sizeof(uint32_t));
+    set->value = realloc(set->value, words_required * sizeof(uint64_t));
     // Clear new memory.
     memset(&set->value[set->capacity], 0,
-           (words_required - set->capacity) * sizeof(uint32_t));
+           (words_required - set->capacity) * sizeof(uint64_t));
     set->capacity = words_required;
   }
 }
@@ -63,10 +64,10 @@ static void MakeRoomFor(BitSet* set, size_t index) {
 // Make room for a number of words.
 static void MakeRoom(BitSet* set, size_t words) {
   if (set->value == NULL) {
-    set->value = calloc(words, sizeof(uint32_t));
+    set->value = calloc(words, sizeof(uint64_t));
     set->capacity = words;
   } else if (words > set->capacity) {
-    set->value = realloc(set->value, words * sizeof(uint32_t));
+    set->value = realloc(set->value, words * sizeof(uint64_t));
     set->capacity = words;
   }
 }
@@ -75,7 +76,7 @@ void BitSetInsert(BitSet* set, size_t index) {
   MakeRoomFor(set, index);
   size_t word, bit;
   CalculateIndexes(index, &word, &bit);
-  set->value[word] |= 1 << bit;
+  set->value[word] |= 1LL << bit;
 }
 
 bool BitSetContains(BitSet* set, size_t index) {
@@ -84,14 +85,36 @@ bool BitSetContains(BitSet* set, size_t index) {
   if (word >= set->capacity) {
     return false;
   }
-  return (set->value[word] & (1 << bit)) != 0;
+  return (set->value[word] & (1LL << bit)) != 0;
+}
+
+size_t BitSetFindFirstSet(BitSet* set) {
+  for (size_t word = 0; word < set->capacity; word++) {
+    int64_t w = set->value[word];
+    int index = ffsll(w);
+    if (index != 0) {
+      return word * 64 + index - 1;
+    }
+  }
+  return (size_t)-1;
+}
+
+size_t BitSetFindFirstClear(BitSet* set) {
+  for (size_t word = 0; word < set->capacity; word++) {
+    int64_t w = ~set->value[word];
+    int index = ffsll(w);
+    if (index != 0) {
+      return word * 64 + index - 1;
+    }
+  }
+  return (size_t)-1;
 }
 
 void BitSetRemove(BitSet* set, size_t index) {
   MakeRoomFor(set, index);
   size_t word, bit;
   CalculateIndexes(index, &word, &bit);
-  set->value[word] &= ~(1 << bit);
+  set->value[word] &= ~(1LL << bit);
 }
 
 void BitSetIntersection(BitSet* set1, BitSet* set2, BitSet* result) {
@@ -104,7 +127,7 @@ void BitSetIntersection(BitSet* set1, BitSet* set2, BitSet* result) {
     return;
   }
   MakeRoom(result, min);
-  memcpy(result->value, set1->value, min * sizeof(uint32_t));
+  memcpy(result->value, set1->value, min * sizeof(uint64_t));
   for (size_t i = 0; i < min && i < set2->capacity; i++) {
     result->value[i] &= set2->value[i];
   }
@@ -116,7 +139,7 @@ void BitSetUnion(BitSet* set1, BitSet* set2, BitSet* result) {
     max = set2->capacity;
   }
   MakeRoom(result, max);
-  memcpy(result->value, set1->value, set1->capacity * sizeof(uint32_t));
+  memcpy(result->value, set1->value, set1->capacity * sizeof(uint64_t));
   for (size_t i = 0; i < set2->capacity; i++) {
     result->value[i] |= set2->value[i];
   }
@@ -135,7 +158,7 @@ void BitSetUnionInPlace(BitSet* dest, BitSet* src) {
 
 void BitSetCopy(BitSet* to, BitSet* from) {
   MakeRoom(to, from->capacity);
-  memcpy(to->value, from->value, from->capacity * sizeof(uint32_t));
+  memcpy(to->value, from->value, from->capacity * sizeof(uint64_t));
 }
 
 bool BitSetEqual(BitSet* set1, BitSet* set2) {
@@ -148,7 +171,7 @@ bool BitSetEqual(BitSet* set1, BitSet* set2) {
 
   // First compare area where the capacities match.  One may have a larger
   // capacity but all the extra bits might be zero.
-  int v = memcmp(set1->value, set2->value, min * sizeof(uint32_t));
+  int v = memcmp(set1->value, set2->value, min * sizeof(uint64_t));
   if (v != 0) {
     return false;
   }
@@ -165,8 +188,8 @@ bool BitSetEqual(BitSet* set1, BitSet* set2) {
 void BitSetExpand(BitSet* set, Vector* vec) {
   size_t index = 0;
   for (size_t word = 0; word < set->capacity; word++) {
-    for (size_t bit = 0; bit < 32; bit++) {
-      if ((set->value[word] & (1 << bit)) != 0) {
+    for (size_t bit = 0; bit < 64; bit++) {
+      if ((set->value[word] & (1LL << bit)) != 0) {
         VectorAppend(vec, (void*)index);
       }
       index++;
@@ -177,8 +200,8 @@ void BitSetExpand(BitSet* set, Vector* vec) {
 size_t BitSetCount(BitSet* set) {
   size_t count = 0;
   for (size_t word = 0; word < set->capacity; word++) {
-    for (size_t bit = 0; bit < 32; bit++) {
-      if ((set->value[word] & (1 << bit)) != 0) {
+    for (size_t bit = 0; bit < 64; bit++) {
+      if ((set->value[word] & (1LL << bit)) != 0) {
         count++;
       }
     }
@@ -191,8 +214,8 @@ void BitSetPrint(BitSet* set, FILE* fp) {
   const char* sep = "";
   size_t index = 0;
   for (size_t word = 0; word < set->capacity; word++) {
-    for (size_t bit = 0; bit < 32; bit++) {
-      if ((set->value[word] & (1 << bit)) != 0) {
+    for (size_t bit = 0; bit < 64; bit++) {
+      if ((set->value[word] & (1LL << bit)) != 0) {
         fprintf(fp, "%s%zd", sep, index);
         sep = ", ";
       }
@@ -209,8 +232,8 @@ void BitSetIteratorStart(BitSetIterator* it, BitSet* set) {
   size_t index = 0;
   // Find first bit with value 1.
   for (size_t word = 0; word < set->capacity; word++) {
-    for (size_t bit = 0; bit < 32; bit++) {
-      if ((set->value[word] & (1 << bit)) != 0) {
+    for (size_t bit = 0; bit < 64; bit++) {
+      if ((set->value[word] & (1LL << bit)) != 0) {
         it->word_offset = word;
         it->bit_offset = bit;
         return;
@@ -225,11 +248,11 @@ bool BitSetIteratorDone(BitSetIterator* it);
 void BitSetIteratorNext(BitSetIterator* it) {
   it->bit_offset++;
   while (it->word_offset < it->set->capacity) {
-    while (it->bit_offset < 32 &&
-           (it->set->value[it->word_offset] & (1 << it->bit_offset)) == 0) {
+    while (it->bit_offset < 64 &&
+           (it->set->value[it->word_offset] & (1LL << it->bit_offset)) == 0) {
       it->bit_offset++;
     }
-    if (it->bit_offset < 32) {
+    if (it->bit_offset < 64) {
       return;
     }
     it->bit_offset = 0;
