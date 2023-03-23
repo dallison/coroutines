@@ -456,6 +456,10 @@ static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
       runnables[index++] = m->blocked_coroutines.value.p[i-1];
     }
   }
+  if (index == 0) {
+    // Only interrrupt set with no coroutines ready.
+    return NULL;
+  }
   
   qsort(runnables, index, sizeof(Coroutine*), CompareTick);
   Coroutine* chosen = runnables[0];
