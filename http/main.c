@@ -130,8 +130,10 @@ void Server(Coroutine* c) {
 
     // Wait for data to arrive.  This will yield to other coroutines and
     // we will resume when data is available to read.
+    
     CoroutineWait(c, data->fd, POLLIN);
     ssize_t n = read(data->fd, buf, sizeof(buf));
+    
     if (n == -1) {
       perror("read");
       close(data->fd);

@@ -94,6 +94,9 @@ void CoroutineStart(Coroutine* c);
 // Yield control to another coroutine.
 void CoroutineYield(Coroutine* c);
 
+// Call another coroutine and store the result.
+void CoroutineCall(Coroutine* c, Coroutine* callee, void* result,
+                   size_t result_size);
 // Yield control and store value.
 void CoroutineYieldValue(Coroutine* c, void* value);
 
@@ -110,8 +113,7 @@ const char* CoroutineGetName(Coroutine* c);
 void CoroutineSetUserData(Coroutine* c, void* user_data);
 void* CoroutineGetUserData(Coroutine* c);
 
-void CoroutineCall(Coroutine* c, Coroutine* callee, void* result,
-                   size_t result_size);
+
 bool CoroutineIsAlive(Coroutine* c, Coroutine* query);
 
 typedef struct CoroutineMachine {

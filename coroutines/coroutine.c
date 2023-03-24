@@ -395,7 +395,7 @@ static int CompareTick(const void* a, const void* b) {
   return (int)(t2 - t1);
 }
 
-static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
+static void BuildPollFds(CoroutineMachine* m) {
   m->num_pollfds = 0;
   AddPollFd(m, &m->interrupt_fd);
   VectorClear(&m->blocked_coroutines);
@@ -413,6 +413,44 @@ static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
       CoroutineTriggerEvent(c);
     }
   }
+}
+
+// Schedule the next coroutine to run.  This scheduler chooses the
+// coroutine that has been waiting longest.  Unless they are just new
+// no two coroutines can have been waiting for the same amount of time.
+// This is a completely fair scheduler with all coroutines given the
+// same priority.
+//
+// We could use malloc/free here but that is a memory allocation.  The
+// use of alloca or a VLA is much faster, albeit not in POSIX.
+//
+// If you want this to be more portable, call malloc or calloc and free it
+// after the chosen coroutine is determined.
+
+static Coroutine* ChooseRunnable(CoroutineMachine* m, int num_ready) {
+#ifndef __cplusplus__
+  Coroutine* runnables[num_ready];      // VLA: C99
+#else
+  Coroutine** runnables = alloca(num_ready * sizeof(Coroutine*));
+#endif
+  size_t index = 0;
+  for (size_t i = 1; i < m->num_pollfds; i++) {
+    struct pollfd* fd = &m->pollfds[i];
+    if (fd->revents != 0) {
+      runnables[index++] = m->blocked_coroutines.value.p[i-1];
+    }
+  }
+  if (index == 0) {
+    // Only interrrupt set with no coroutines ready.
+    return NULL;
+  }
+  
+  qsort(runnables, index, sizeof(Coroutine*), CompareTick);
+  return runnables[0];
+}
+
+static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
+  BuildPollFds(m);
 
   // Wait for coroutines (or the interrupt fd) to trigger.
   int num_ready = poll(m->pollfds, m->num_pollfds, -1);
@@ -432,36 +470,7 @@ static Coroutine* GetRunnableCoroutine(CoroutineMachine* m) {
     return NULL;
   }
   
-  // Schedule the next coroutine to run.  This scheduler chooses the
-  // coroutine that has been waiting longest.  Unless they are just new
-  // no two coroutines can have been waiting for the same amount of time.
-  // This is a completely fair scheduler with all coroutines given the
-  // same priority.
-  //
-  // We could use malloc/free here but that is a memory allocation.  The
-  // use of alloca or a VLA is much faster, albeit not in POSIX.
-  //
-  // If you want this to be more portable, call malloc or calloc and free it
-  // after the chosen coroutine is determined.
-#ifndef __cplusplus__
-  Coroutine* runnables[num_ready];      // VLA: C99
-#else
-  Coroutine** runnables = alloca(num_ready * sizeof(Coroutine*));
-#endif
-  size_t index = 0;
-  for (size_t i = 1; i < m->num_pollfds; i++) {
-    struct pollfd* fd = &m->pollfds[i];
-    if (fd->revents != 0) {
-      runnables[index++] = m->blocked_coroutines.value.p[i-1];
-    }
-  }
-  if (index == 0) {
-    // Only interrrupt set with no coroutines ready.
-    return NULL;
-  }
-  
-  qsort(runnables, index, sizeof(Coroutine*), CompareTick);
-  Coroutine* chosen = runnables[0];
+  Coroutine* chosen = ChooseRunnable(m, num_ready);
 
   if (chosen != NULL) {
     CoroutineClearEvent(chosen);
