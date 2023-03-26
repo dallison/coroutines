@@ -26,12 +26,13 @@ void Usage(void) {
 }
 
 typedef struct {
+  const char* server_name; // Hostname of server.
   in_addr_t ipaddr;  // IP address for server (IPv4).
   String* filename;  // File to get (not owned by this struct).
 } ServerData;
 
 // Send data to the server from a coroutine.
-static bool SendToServer(Coroutine* c, int fd, const char* response,
+static bool SendToServer(Coroutine* c, int fd, const char* request,
                          size_t length) {
   int offset = 0;
   const size_t kMaxLength = 1024;
@@ -43,7 +44,7 @@ static bool SendToServer(Coroutine* c, int fd, const char* response,
     if (nbytes > kMaxLength) {
       nbytes = kMaxLength;
     }
-    ssize_t n = write(fd, response + offset, nbytes);
+    ssize_t n = write(fd, request + offset, nbytes);
     if (n == -1) {
       perror("write");
       return false;
@@ -236,11 +237,8 @@ void Client(Coroutine* c) {
   }
   String request = {0};
 
-  char hostname[256];
-  gethostname(hostname, sizeof(hostname));
-
   StringPrintf(&request, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n",
-               data->filename->value, hostname);
+               data->filename->value, data->server_name);
   bool ok = SendToServer(c, fd, request.value, request.length);
   if (!ok) {
     fprintf(stderr, "Failed to send to server: %s\n", strerror(errno));
@@ -395,7 +393,8 @@ int main(int argc, const char* argv[]) {
   CoroutineMachine m;
   CoroutineMachineInit(&m);
 
-  ServerData server_data = {ipaddr = ipaddr, .filename = &filename};
+  ServerData server_data = {.server_name = host.value,
+    ipaddr = ipaddr, .filename = &filename};
   for (int i = 0; i < num_jobs; i++) {
     Coroutine* client = NewCoroutineWithUserData(&m, Client, &server_data);
     CoroutineStart(client);

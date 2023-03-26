@@ -375,6 +375,7 @@ void CoroutineMachineInit(CoroutineMachine* m) {
   m->interrupt_fd.fd = NewEventFd();
   m->interrupt_fd.events = POLLIN;
   m->tick_count = 0;
+  m->last_freed_coroutine_id = -1;
 }
 
 static void AddPollFd(CoroutineMachine* m, struct pollfd* fd) {
@@ -507,20 +508,21 @@ void CoroutineMachineAddCoroutine(CoroutineMachine* m, Coroutine* c) {
 
 // Removes a coroutine but doesn't free it.
 void CoroutineMachineRemoveCoroutine(CoroutineMachine* m, Coroutine* c) {
-  for (ListElement* e = m->coroutines.first; e != NULL; e = e->next) {
-    Coroutine* co = (Coroutine*)e;
-    if (co == c) {
-      ListDeleteElement(&m->coroutines, e);
-      BitSetRemove(&m->coroutine_ids, c->id);
-      return;
-    }
-  }
+  ListDeleteElement(&m->coroutines, &c->element);
+  BitSetRemove(&m->coroutine_ids, c->id);
+  m->last_freed_coroutine_id = c->id;
 }
 
 size_t CoroutineMachineAllocateId(CoroutineMachine* m) {
-  size_t id = BitSetFindFirstClear(&m->coroutine_ids);
-  if (id == (size_t)-1) {
-    id = m->next_coroutine_id++;
+  size_t id;
+  if (m->last_freed_coroutine_id != -1) {
+    id = m->last_freed_coroutine_id;
+    m->last_freed_coroutine_id = -1;
+  } else {
+    id = BitSetFindFirstClear(&m->coroutine_ids);
+    if (id == (size_t)-1) {
+      id = m->next_coroutine_id++;
+    }
   }
   BitSetInsert(&m->coroutine_ids, id);
   return id;
